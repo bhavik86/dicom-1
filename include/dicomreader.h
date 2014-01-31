@@ -1,31 +1,59 @@
 #ifndef DICOMREADER_H
 #define DICOMREADER_H
 
-#include <QtCore/QObject>
+#include <QObject>
 
-#include <QtGui/QImage>
+#include <QImage>
 
 #include "gdcmImage.h"
+
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/ocl/ocl.hpp"
 
 #define DICOM_ALL_OK 0
 #define DICOM_FILE_NOT_READABLE 1
 
-class DicomReader : public QObject {
-    Q_OBJECT
-public:
-    explicit DicomReader(QObject * parent = 0);
-    explicit DicomReader(const QString & dicomFile, QObject * parent = 0);
-    static QImage convertToFormat_RGB888(gdcm::Image const & gimage, char * buffer, int & error);
+#define OPENCL_ALL_OK 0
+#define OPENCL_NOT_INITIALIZED 1
 
-    QImage dQImage();
+#define CANNY_LOWER 50
+
+class DicomReader : public QObject {
+  Q_OBJECT
+public:
+  explicit DicomReader(QObject * parent = 0);
+  explicit DicomReader(const QString & dicomFile, QObject * parent = 0);
+
+  ~DicomReader();
+
+  static int gImageToMat(const gdcm::Image & gImage, std::vector<cv::/*ocl::ocl*/Mat*> & dClImages);
+
+  static void findContours(std::vector<cv::ocl::oclMat*> & dCvImages, std::vector<cv::Mat*> & contourImages);
+
+  QImage dQImage();
+  cv::Mat dCImage();
+
+  void decImageNumber();
+  void incImageNumber();
+
+  void showImageWithNumber();
+
+  void reset();
 
 private:
-    QImage _dQImage;
+  int _imageNumber;
+  QImage _dQImage;
+  std::vector<cv::/*ocl::ocl*/Mat*>_dClImages;
+  std::vector<cv::Mat*>_contourImages;
+
+  int initializeOpenCL();
 
 signals:
 
 public slots:
-    int readFile(const QString & dicomFile);
+  int readFile(const QString & dicomFile);
+  int readFileByHand(const QString & dicomFileName);
 };
 
 #endif // DICOMREADER_H

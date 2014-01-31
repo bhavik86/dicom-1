@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 
+#include <QKeyEvent>
+
 #include "dicomreader.h"
 
 namespace Ui {
@@ -23,6 +25,7 @@ private:
     DicomReader * _dicomReader;
 
     void fetchConnections();
+    void keyPressEvent(QKeyEvent * event);
 
 signals:
     void signalDicomToRead(const QString & dicomFile);

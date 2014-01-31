@@ -28,7 +28,8 @@ unix {
             -lgdcmDSED \
             -lgdcmMSFF \
             -lgdcmIOD\
-            -lgdcmopenjpeg
+            -lgdcmopenjpeg\
+            -ltbb_debug
 }
 
 win32 {

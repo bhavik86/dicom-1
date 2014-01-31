@@ -26,14 +26,19 @@ void MainWindow::fetchConnections() {
 }
 
 void MainWindow::readDicom() {
-    QString dicomFile = QFileDialog::getOpenFileName(this, tr("Load DICOM file for processing"), "./");
-    if (dicomFile != "") {
-        if (_dicomReader->readFile(dicomFile) == DICOM_ALL_OK) {
-            ui->gImage->setPixmap(QPixmap::fromImage(_dicomReader->dQImage()));
-        }
+    QString dicomFileName = QFileDialog::getOpenFileName(this, tr("Load DICOM file for processing"), "./");
+    if (dicomFileName != "") {
+        _dicomReader->readFile(dicomFileName);
     }
     else {
         QMessageBox::critical(this, "Error", "Empty file", QMessageBox::Ok);
         return;
+    }
+}
+
+void MainWindow::keyPressEvent(QKeyEvent * event) {
+    switch(event->key()) {
+        case Qt::Key_Left : _dicomReader->decImageNumber(); break;
+        case Qt::Key_Right : _dicomReader->incImageNumber(); break;
     }
 }
