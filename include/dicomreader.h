@@ -27,9 +27,9 @@ public:
 
   ~DicomReader();
 
-  static int gImageToMat(const gdcm::Image & gImage, std::vector<cv::/*ocl::ocl*/Mat*> & dClImages);
+  static int gImageToMat(const gdcm::Image & gImage, std::vector<cv::/*ocl::ocl*/Mat*> & ctImages);
 
-  static void findContours(std::vector<cv::ocl::oclMat*> & dCvImages, std::vector<cv::Mat*> & contourImages);
+  static void findContours(std::vector<cv::Mat *> &ctImages, std::vector<cv::Mat*> & contourImages);
 
   QImage dQImage();
   cv::Mat dCImage();
@@ -44,10 +44,10 @@ public:
 private:
   int _imageNumber;
   QImage _dQImage;
-  std::vector<cv::/*ocl::ocl*/Mat*>_dClImages;
+  std::vector<cv::/*ocl::ocl*/Mat*>_ctImages;
   std::vector<cv::Mat*>_contourImages;
 
-  int initializeOpenCL();
+  int initOpenCL();
 
 signals:
 
