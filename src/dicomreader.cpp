@@ -8,10 +8,7 @@ typedef uint32_t u_int32_t;
 
 #endif
 
-#include <QFile>
-
-#include <QDebug>
-#include <QDateTime>
+#include "CL/cl.hpp"
 
 #include "dicomreader.h"
 
@@ -26,30 +23,33 @@ typedef uint32_t u_int32_t;
 
 typedef struct _LoaderData {
     std::vector<cv::/*ocl::ocl*/Mat*> * ctImages;
-    int byteSize;
+    int bytesAllocated;
     int width;
     int height;
     int offset;
     int type;
+    bool isLittleEndian;
+    bool inverseNeeded;
     double slope;
     double intercept;
     char * buffer;
 }LoaderData;
 
+template <typename T>
 class ParallelLoader : public cv::ParallelLoopBody {
 private:
     LoaderData _loaderData;
 
 public:
-    ParallelLoader(LoaderData loaderData) : _loaderData(loaderData) {
-        _loaderData.offset = _loaderData.byteSize * _loaderData.width * _loaderData.height;
+    ParallelLoader(LoaderData & loaderData) : _loaderData(loaderData) {
+        _loaderData.offset = _loaderData.bytesAllocated * _loaderData.width * _loaderData.height;
     }
 
     virtual void operator ()(const cv::Range & r) const {
         for (register int i = r.start; i < r.end; i ++) {
 
             cv::Mat * data = new cv::Mat(_loaderData.width, _loaderData.height, _loaderData.type);
-            u_int16_t pixel;
+            T pixel;
 
             char * bufferImageI = _loaderData.buffer + _loaderData.offset * i;
 
@@ -57,14 +57,40 @@ public:
                 for (int y = 0; y < _loaderData.height; y ++) {
                     pixel ^= pixel;
 
-                    pixel = ((u_int16_t) *(bufferImageI + 1) << 8) | *bufferImageI;
-                    bufferImageI += 2;
+                    if (_loaderData.isLittleEndian) {
+                        for (int k = 0; k < _loaderData.bytesAllocated; k ++) {
+                            pixel |= (T)*(bufferImageI + k) << (8 * k);
+                        }
+                    }
+                    else {
+                        for (int k = _loaderData.bytesAllocated - 1; k > 0 ; k --) {
+                            pixel |= (T)*(bufferImageI + k) << (8 * (_loaderData.bytesAllocated - k + 1));
+                        }
+                    }
 
-                    data->at<u_int16_t>(x, y) = _loaderData.slope * pixel + _loaderData.intercept;
+                    bufferImageI += _loaderData.bytesAllocated;
+
+                    //MONOCHROME2 - high value -> brighter, -1 high -> blacker
+
+                    if (_loaderData.inverseNeeded) {
+                        data->at<T>(x, y) = ~(T)(_loaderData.slope * pixel + _loaderData.intercept);
+                    }
+                    else {
+                        data->at<T>(x, y) = _loaderData.slope * pixel + _loaderData.intercept;
+                    }
                 }
             }
 
-            //cv::resize(*data, *data, cv::Size(_width / 4, _height / 4));
+            cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data);
+
+            /*
+            //cv::resize(*data, *data, cv::Size(_loaderData.width / 2, _loaderData.height / 2));
+            cv::GaussianBlur(*data, *data, cv::Size(5, 5), 5);
+            cv::Canny(*data, *data, CANNY_LOWER, 3 * CANNY_LOWER, 5);
+            */
+
+            //cv::ocl::GaussianBlur(*oclData, *oclData, cv::Size(5, 5), 5);
+            //cv::ocl::Canny(*data, *data, CANNY_LOWER, 3 * CANNY_LOWER, 5);
 
             _loaderData.ctImages->at(i) = data;
         }
@@ -77,8 +103,6 @@ int DicomReader::initOpenCL() {
 
     if (cv::ocl::getOpenCLPlatforms(platforms)) {
 
-        std::cout << platforms[1]->platformName << std::endl;
-
         cv::ocl::DevicesInfo devices;
 
         // for now just take the first OpenCL capable GPU
@@ -87,7 +111,7 @@ int DicomReader::initOpenCL() {
             if (cv::ocl::getOpenCLDevices(devices, cv::ocl::CVCL_DEVICE_TYPE_GPU, platforms[platformN])) {
                 cv::ocl::setDevice(devices[0]);
 
-                std::cout << devices[0]->deviceName << " " << devices[0]->deviceDriverVersion << std::endl;
+                std::cout << cv::ocl::Context::getContext()->getDeviceInfo().deviceVersionMinor << std::endl;
 
                 return OPENCL_ALL_OK;
             }
@@ -142,22 +166,44 @@ int DicomReader::gImageToMat(const gdcm::Image & gImage, std::vector<cv::Mat*> &
     gImage.GetBuffer(buffer);
     ctImages.resize(imagesCount);
 
-    qint64 time = QDateTime::currentMSecsSinceEpoch();
-
     LoaderData loaderData;
     loaderData.ctImages = &ctImages;
     //MONOCHROME2
-    if (gImage.GetPhotometricInterpretation() == gdcm::PhotometricInterpretation::MONOCHROME2) {
-        loaderData.byteSize = 2;
-        loaderData.type = CV_16SC1;
+
+    gdcm::PhotometricInterpretation photometricInterpretation = gImage.GetPhotometricInterpretation();
+    if (photometricInterpretation == gdcm::PhotometricInterpretation::MONOCHROME2) {
+        loaderData.inverseNeeded = true;
     }
+    else {
+        loaderData.inverseNeeded = false;
+    }
+
+    gdcm::PixelFormat pixelFormat = gImage.GetPixelFormat();
+    if (pixelFormat.GetScalarType() == gdcm::PixelFormat::UINT16) {
+        loaderData.type = CV_16UC1;
+    }
+    loaderData.bytesAllocated = pixelFormat.GetBitsAllocated() / 8;
+
+    loaderData.isLittleEndian = (pixelFormat.GetBitsAllocated() - pixelFormat.GetHighBit() == 1) ? true : false;
+
     loaderData.width = gImage.GetDimension(0);
     loaderData.height = gImage.GetDimension(1);
-    loaderData.slope = gImage.GetSlope();
-    loaderData.intercept = gImage.GetIntercept();
+
+    if (pixelFormat.GetSamplesPerPixel() == 1) {
+        loaderData.slope = 1.0;
+        loaderData.intercept = 0.0;
+    }
+    else {
+        loaderData.slope = gImage.GetSlope();
+        loaderData.intercept = gImage.GetIntercept();
+    }
+
     loaderData.buffer = buffer;
 
-    cv::parallel_for_(cv::Range(0, imagesCount), ParallelLoader(loaderData));
+    cv::ocl::oclMat * oclData = new cv::ocl::oclMat(500, 500, CV_16UC1);
+    cv::ocl::GaussianBlur(*oclData, *oclData, cv::Size(5, 5), 5);
+
+    cv::parallel_for_(cv::Range(0, imagesCount), ParallelLoader<u_int16_t>(loaderData));
 
     std::cout << "processing done" << std::endl;
     cv::imshow(WINDOW_CV_IMAGE, *(ctImages[0]));
@@ -233,46 +279,6 @@ void DicomReader::findContours(std::vector<cv::/*ocl::ocl*/Mat*> & dClImages, st
         contourImages.push_back(new cv::Mat(*(dCvImages[i])));
     }
 */
-}
-
-int DicomReader::readFileByHand(const QString & dicomFileName) {
-    QFile dicomFile(dicomFileName);
-    char * buffer = new char[4];
-
-    if (!dicomFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        dicomFile.close();
-        return DICOM_FILE_NOT_READABLE;
-    }
-
-    dicomFile.seek(128);
-    dicomFile.read(buffer, 4);
-
-    if (strcmp(buffer, "DICM")) {
-        qDebug() << "not_ok";
-        dicomFile.close();
-        return DICOM_FILE_NOT_READABLE;
-    }
-    else {
-        std::cout << buffer << std::endl;
-    }
-
-    char * group = new char[2];
-    char * number = new char[2];
-    char * vr = new char[2];
-
-    quint64 pos = 132;
-    dicomFile.seek(pos);
-    dicomFile.read(group, 2);
-    dicomFile.read(number, 2);
-
-    while (!dicomFile.atEnd() && !(*group ^= 0x0002) && !(*number ^= 0x0010)) {
-        dicomFile.read(vr, 2);
-        
-    }
-
-    std::cout << "HERE";
-    dicomFile.close();
-    return DICOM_ALL_OK;
 }
 
 void DicomReader::decImageNumber() {

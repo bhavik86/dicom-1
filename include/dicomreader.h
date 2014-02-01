@@ -47,13 +47,14 @@ private:
   std::vector<cv::/*ocl::ocl*/Mat*>_ctImages;
   std::vector<cv::Mat*>_contourImages;
 
+  cv::ocl::Context * _context;
+
   int initOpenCL();
 
 signals:
 
 public slots:
   int readFile(const QString & dicomFile);
-  int readFileByHand(const QString & dicomFileName);
 };
 
 #endif // DICOMREADER_H
