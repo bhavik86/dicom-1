@@ -26,7 +26,7 @@ void MainWindow::fetchConnections() {
 }
 
 void MainWindow::readDicom() {
-    QString dicomFileName = QFileDialog::getOpenFileName(this, tr("Load DICOM file for processing"), "./");
+    QString dicomFileName = QFileDialog::getOpenFileName(this, tr("Load DICOM file for processing"), "/home/walkindude/dicomF/");
     if (dicomFileName != "") {
         _dicomReader->readFile(dicomFileName);
     }
@@ -40,5 +40,7 @@ void MainWindow::keyPressEvent(QKeyEvent * event) {
     switch(event->key()) {
         case Qt::Key_Left : _dicomReader->decImageNumber(); break;
         case Qt::Key_Right : _dicomReader->incImageNumber(); break;
+        case Qt::Key_Space : _dicomReader->readFile("/home/walkindude/dicomF/Martyshkina_Svetlana_Martyshkina, Svetlana 05.03.120001.dcm"); break;
+        case Qt::Key_Escape : qApp->quit();
     }
 }

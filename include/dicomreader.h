@@ -17,7 +17,7 @@
 #define OPENCL_ALL_OK 0
 #define OPENCL_NOT_INITIALIZED 1
 
-#define CANNY_LOWER 50
+#define CANNY_LOWER 150
 
 class DicomReader : public QObject {
   Q_OBJECT
@@ -27,9 +27,7 @@ public:
 
   ~DicomReader();
 
-  static int gImageToMat(const gdcm::Image & gImage, std::vector<cv::/*ocl::ocl*/Mat*> & ctImages);
-
-  static void findContours(std::vector<cv::Mat *> &ctImages, std::vector<cv::Mat*> & contourImages);
+  int gImageToMat(const gdcm::Image & gImage, std::vector<cv::/*ocl::ocl*/Mat*> & ctImages, std::vector<cv::Mat *> &images);
 
   QImage dQImage();
   cv::Mat dCImage();
@@ -37,19 +35,20 @@ public:
   void decImageNumber();
   void incImageNumber();
 
-  void showImageWithNumber();
-
-  void reset();
+  void reset(std::vector<cv::Mat*> & ctImages,
+             std::vector<cv::Mat*> & images);
 
 private:
   int _imageNumber;
   QImage _dQImage;
   std::vector<cv::/*ocl::ocl*/Mat*>_ctImages;
-  std::vector<cv::Mat*>_contourImages;
+  std::vector<cv::Mat*>_images;
 
   cv::ocl::Context * _context;
 
   int initOpenCL();
+
+  void showImageWithNumber(const int & imageNumber);
 
 signals:
 

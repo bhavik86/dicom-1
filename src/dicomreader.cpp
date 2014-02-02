@@ -19,10 +19,12 @@ typedef uint32_t u_int32_t;
 #include "gdcmStringFilter.h"
 #include "gdcmDICOMDIR.h"
 
-#define WINDOW_CV_IMAGE "cvimage"
+#define WINDOW_DICOM_IMAGE "ctimage"
+#define WINDOW_CONTOUR_IMAGE "contour"
 
 typedef struct _LoaderData {
     std::vector<cv::/*ocl::ocl*/Mat*> * ctImages;
+    std::vector<cv::Mat*> * images;
     int bytesAllocated;
     int width;
     int height;
@@ -81,18 +83,50 @@ public:
                 }
             }
 
-            cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data);
+            //cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data);
 
-            /*
+
             //cv::resize(*data, *data, cv::Size(_loaderData.width / 2, _loaderData.height / 2));
-            cv::GaussianBlur(*data, *data, cv::Size(5, 5), 5);
-            cv::Canny(*data, *data, CANNY_LOWER, 3 * CANNY_LOWER, 5);
-            */
+            //cv::GaussianBlur(*data, *data, cv::Size(9, 9), 5);
+            //cv::dilate(*data, *data, cv::Mat(3, 3, CV_8UC1));
+            //cv::Scharr(*data, *data, -1, 1, 0);
+
+            cv::Mat * data8 = new cv::Mat(_loaderData.width, _loaderData.height, CV_8UC1);
+            data->convertTo(*data8, CV_8UC1, 1/256.0);
+
+
+            _loaderData.images->at(i) = data;
+            //delete data;
+
+            //cv::Canny(*data8, *data8, CANNY_LOWER, 3 * CANNY_LOWER, 5);
+
 
             //cv::ocl::GaussianBlur(*oclData, *oclData, cv::Size(5, 5), 5);
             //cv::ocl::Canny(*data, *data, CANNY_LOWER, 3 * CANNY_LOWER, 5);
+            std::vector<std::vector<cv::Point> > contours;
+            std::vector<cv::Vec4i> hierarchy;
 
-            _loaderData.ctImages->at(i) = data;
+            cv::Mat * contourImage = new cv::Mat(_loaderData.width, _loaderData.height, CV_8UC1, cv::Scalar(0));
+            cv::Mat * laplace16 = new cv::Mat(_loaderData.width, _loaderData.height, CV_8UC1, cv::Scalar(0));
+
+            //cv::threshold(*data8, *contourImage, 128, 255, CV_THRESH_BINARY);
+            cv::GaussianBlur(*data8, *data8, cv::Size(5, 5), 5);
+            //cv::Canny(*data8, *contourImage, CANNY_LOWER, 3 * CANNY_LOWER, 3);
+            //cv::Sobel(*data8, *contourImage, -1, 1, 0);
+            cv::Laplacian(*data8, *laplace16, CV_16SC1, 3);
+            cv::convertScaleAbs(*laplace16, *contourImage);
+            /*
+            cv::findContours(*data8, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+
+            for (uint k = 0; k < contours.size(); k ++) {
+                if (contours.at(k).size() > 10) {
+                    cv::drawContours(*contourImage, contours, k, cv::Scalar(0x00FF), 2, 8, hierarchy, 0, cv::Point());
+                }
+            }*/
+
+            delete data8;
+
+            _loaderData.ctImages->at(i) = contourImage;
         }
 
     }
@@ -111,7 +145,21 @@ int DicomReader::initOpenCL() {
             if (cv::ocl::getOpenCLDevices(devices, cv::ocl::CVCL_DEVICE_TYPE_GPU, platforms[platformN])) {
                 cv::ocl::setDevice(devices[0]);
 
-                std::cout << cv::ocl::Context::getContext()->getDeviceInfo().deviceVersionMinor << std::endl;
+                std::cout << cv::ocl::Context::getContext()->getDeviceInfo().deviceName << " " <<
+                             cv::ocl::Context::getContext()->getDeviceInfo().deviceProfile << std::endl;
+
+                return OPENCL_ALL_OK;
+            }
+        }
+
+        // if no OpenCL gpu-capable, take first capable CPU, otherwise - not initialized OpenCL
+        for (uint platformN = 0; platformN < platforms.size(); platformN ++) {
+
+            if (cv::ocl::getOpenCLDevices(devices, cv::ocl::CVCL_DEVICE_TYPE_CPU, platforms[platformN])) {
+                cv::ocl::setDevice(devices[0]);
+
+                std::cout << cv::ocl::Context::getContext()->getDeviceInfo().deviceName << " " <<
+                             cv::ocl::Context::getContext()->getDeviceInfo().deviceProfile << std::endl;
 
                 return OPENCL_ALL_OK;
             }
@@ -128,10 +176,11 @@ DicomReader::DicomReader(QObject * parent) :
     QObject(parent),
     _imageNumber(0) {
     if (!initOpenCL()) {
-        cv::namedWindow(WINDOW_CV_IMAGE,cv::WINDOW_AUTOSIZE);
+        cv::namedWindow(WINDOW_CONTOUR_IMAGE, cv::WINDOW_AUTOSIZE | cv::WINDOW_OPENGL);
+        cv::namedWindow(WINDOW_DICOM_IMAGE, cv::WINDOW_AUTOSIZE | cv::WINDOW_OPENGL);
     }
     else {
-        std::cerr << "OPENCL_NOT_INITIALIZED" << std::endl;
+        std::cerr << "OpenCL is not initialized... aborted" << std::endl;
         exit(0);
     }
 
@@ -143,21 +192,24 @@ DicomReader::DicomReader(const QString & dicomFile, QObject * parent) :
 }
 
 DicomReader::~DicomReader() {
-    reset();
+    reset(_ctImages, _images);
 }
 
-void DicomReader::reset() {
-    qDeleteAll(_ctImages.begin(), _ctImages.end());
-    _ctImages.clear();
+void DicomReader::reset(std::vector<cv::Mat*> & ctImages,
+                        std::vector<cv::Mat*> & images) {
+    qDeleteAll(ctImages.begin(), ctImages.end());
+    ctImages.clear();
+    qDeleteAll(images.begin(), images.end());
+    images.clear();
 }
 
-int DicomReader::gImageToMat(const gdcm::Image & gImage, std::vector<cv::Mat*> & ctImages) {
+int DicomReader::gImageToMat(const gdcm::Image & gImage, std::vector<cv::Mat*> & ctImages,
+                             std::vector<cv::Mat*> & images) {
 
     int imagesCount = gImage.GetDimension(2);
 
     //clear previous "garbage"
-    qDeleteAll(ctImages.begin(), ctImages.end());
-    ctImages.clear();
+    reset(ctImages, images);
 
     std::vector<char>vbuffer;
     vbuffer.resize(gImage.GetBufferLength());
@@ -165,9 +217,11 @@ int DicomReader::gImageToMat(const gdcm::Image & gImage, std::vector<cv::Mat*> &
 
     gImage.GetBuffer(buffer);
     ctImages.resize(imagesCount);
+    images.resize(imagesCount);
 
     LoaderData loaderData;
     loaderData.ctImages = &ctImages;
+    loaderData.images = &images;
     //MONOCHROME2
 
     gdcm::PhotometricInterpretation photometricInterpretation = gImage.GetPhotometricInterpretation();
@@ -200,13 +254,15 @@ int DicomReader::gImageToMat(const gdcm::Image & gImage, std::vector<cv::Mat*> &
 
     loaderData.buffer = buffer;
 
-    cv::ocl::oclMat * oclData = new cv::ocl::oclMat(500, 500, CV_16UC1);
-    cv::ocl::GaussianBlur(*oclData, *oclData, cv::Size(5, 5), 5);
+    std::cout << "processing start" <<std::endl;
+
+    //cv::ocl::oclMat * oclData = new cv::ocl::oclMat(500, 500, CV_16UC1);
+    //cv::ocl::GaussianBlur(*oclData, *oclData, cv::Size(5, 5), 5);
 
     cv::parallel_for_(cv::Range(0, imagesCount), ParallelLoader<u_int16_t>(loaderData));
 
     std::cout << "processing done" << std::endl;
-    cv::imshow(WINDOW_CV_IMAGE, *(ctImages[0]));
+    showImageWithNumber(0);
 
     return DICOM_ALL_OK;
 }
@@ -220,9 +276,9 @@ int DicomReader::readFile(const QString & dicomFile) {
         return DICOM_FILE_NOT_READABLE;
     }
 
-    gdcm::File & dFile = dIReader.GetFile();
+  //  gdcm::File & dFile = dIReader.GetFile();
     gdcm::Image & dImage = dIReader.GetImage();
-
+/*
     gdcm::StringFilter dStringFilter;
     dStringFilter.SetFile(dFile);
 
@@ -237,8 +293,8 @@ int DicomReader::readFile(const QString & dicomFile) {
     else {
         return DICOM_FILE_NOT_READABLE;
     }
-
-    gImageToMat(dImage, _ctImages);
+*/
+    gImageToMat(dImage, _ctImages, _images);
 
     //findContours(_dClImages, _contourImages);
 
@@ -250,49 +306,19 @@ int DicomReader::readFile(const QString & dicomFile) {
     return DICOM_ALL_OK;
 }
 
-void DicomReader::findContours(std::vector<cv::/*ocl::ocl*/Mat*> & dClImages, std::vector<cv::Mat*> & contourImages) {
-
-    cv::/*ocl::ocl*/Mat * image;
-    std::vector<std::vector<cv::Point> > contours;
-    std::vector<cv::Vec4i> hierarchy;
-
-    for (uint i = 0; i < dClImages.size(); i ++) {
-        image = dClImages[i];
-
-        cv::Mat * contourImage = new cv::Mat(image->rows, image->cols, CV_16UC1);
-
-        std::cout << "heRE" << std::endl;
-
-        cv::threshold(*image, *contourImage, 128, 255, CV_THRESH_BINARY);
-        //cv::GaussianBlur(*image, *contourImage, cv::Size(3,3), 5);
-        //cv::Canny(*image, *image, CANNY_LOWER, 3 * CANNY_LOWER, 3);
-        /*cv::findContours(*image, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
-
-        for (uint k = 0; k < contours.size(); k ++) {
-            cv::drawContours(*contourImage, contours, k, cv::Scalar(0x4FFFFFFF), 2, 8, hierarchy, 0, cv::Point());
-        }*/
-
-        contourImages.push_back(contourImage);
-    }
-/*
-    for (uint i = 1; i < dCvImages.size(); i ++) {
-        contourImages.push_back(new cv::Mat(*(dCvImages[i])));
-    }
-*/
-}
-
 void DicomReader::decImageNumber() {
     _imageNumber = ((_imageNumber) ? _imageNumber : _ctImages.size()) - 1;
-    showImageWithNumber();
+    showImageWithNumber(_imageNumber);
 }
 
 void DicomReader::incImageNumber() {
     ++_imageNumber %= _ctImages.size();
-    showImageWithNumber();
+    showImageWithNumber(_imageNumber);
 }
 
-void DicomReader::showImageWithNumber() {
-    cv::imshow(WINDOW_CV_IMAGE, *(_ctImages[_imageNumber]));
+void DicomReader::showImageWithNumber(const int & imageNumber) {
+    cv::imshow(WINDOW_CONTOUR_IMAGE, *(_ctImages[imageNumber]));
+    cv::imshow(WINDOW_DICOM_IMAGE, *(_images[imageNumber]));
     cv::waitKey(10);
 }
 
