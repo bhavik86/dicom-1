@@ -137,42 +137,27 @@ int DicomReader::initOpenCL() {
 
     if (cv::ocl::getOpenCLPlatforms(platforms)) {
 
-        cv::ocl::DevicesInfo gpu_devices;
+        cv::ocl::DevicesInfo devices;
 
-        // for now just take the first OpenCL capable GPU
-        for (uint platformN = 0; platformN < platforms.size(); platformN ++) {
+        cv::ocl::DeviceType deviceType[2] = {cv::ocl::CVCL_DEVICE_TYPE_GPU, cv::ocl::CVCL_DEVICE_TYPE_CPU};
 
-            if (cv::ocl::getOpenCLDevices(gpu_devices, cv::ocl::CVCL_DEVICE_TYPE_GPU, platforms[platformN])) {
-                try {
-                    cv::ocl::setDevice(gpu_devices[0]);
+        // for now just take the first OpenCL capable GPU or CPU
 
-                    std::cout << cv::ocl::Context::getContext()->getDeviceInfo().deviceName << " " <<
-                                cv::ocl::Context::getContext()->getDeviceInfo().deviceProfile << std::endl;
+        for (uint i = 0; i < 2; i ++) {
+            for (uint platformN = 0; platformN < platforms.size(); platformN ++) {
 
-                    return OPENCL_ALL_OK;
-                }
-                catch (cv::Exception &){
-                    continue;
-                }
-            }
-        }
+                if (cv::ocl::getOpenCLDevices(devices, deviceType[i], platforms[platformN])) {
+                    try {
+                        cv::ocl::setDevice(devices[0]);
 
-        cv::ocl::DevicesInfo cpu_devices;
+                        std::cout << cv::ocl::Context::getContext()->getDeviceInfo().deviceName << " " <<
+                                    cv::ocl::Context::getContext()->getDeviceInfo().deviceProfile << std::endl;
 
-        // if no OpenCL gpu-capable, take first capable CPU, otherwise - not initialized OpenCL
-        for (uint platformN = 0; platformN < platforms.size(); platformN ++) {
-
-            if (cv::ocl::getOpenCLDevices(cpu_devices, cv::ocl::CVCL_DEVICE_TYPE_CPU, platforms[platformN])) {
-                try {
-                    cv::ocl::setDevice(cpu_devices[0]);
-
-                    std::cout << cv::ocl::Context::getContext()->getDeviceInfo().deviceName << " " <<
-                               cv::ocl::Context::getContext()->getDeviceInfo().deviceProfile << std::endl;
-
-                    return OPENCL_ALL_OK;
-                }
-                catch (cv::Exception &) {
-                    continue;
+                        return OPENCL_ALL_OK;
+                    }
+                    catch (cv::Exception &){
+                        continue;
+                    }
                 }
             }
         }
