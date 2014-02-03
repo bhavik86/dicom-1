@@ -83,9 +83,6 @@ public:
                 }
             }
 
-            //cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data);
-
-
             //cv::resize(*data, *data, cv::Size(_loaderData.width / 2, _loaderData.height / 2));
             //cv::GaussianBlur(*data, *data, cv::Size(9, 9), 5);
             //cv::dilate(*data, *data, cv::Mat(3, 3, CV_8UC1));
@@ -94,29 +91,19 @@ public:
             cv::Mat * data8 = new cv::Mat(_loaderData.width, _loaderData.height, CV_8UC1);
             data->convertTo(*data8, CV_8UC1, 1/256.0);
 
-
             _loaderData.images->at(i) = data;
-            //delete data;
 
-            //cv::Canny(*data8, *data8, CANNY_LOWER, 3 * CANNY_LOWER, 5);
+            cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data8);
 
-
-            //cv::ocl::GaussianBlur(*oclData, *oclData, cv::Size(5, 5), 5);
-            //cv::ocl::Canny(*data, *data, CANNY_LOWER, 3 * CANNY_LOWER, 5);
             std::vector<std::vector<cv::Point> > contours;
             std::vector<cv::Vec4i> hierarchy;
 
-            cv::Mat * contourImage = new cv::Mat(_loaderData.width, _loaderData.height, CV_8UC1, cv::Scalar(0));
-            cv::Mat * laplace16 = new cv::Mat(_loaderData.width, _loaderData.height, CV_8UC1, cv::Scalar(0));
+            cv::Mat * contourImage = new cv::Mat(_loaderData.width, _loaderData.height, CV_16UC1, cv::Scalar(0));
+            //cv::Mat * laplace16 = new cv::Mat(_loaderData.width, _loaderData.height, CV_8UC1, cv::Scalar(0));
 
-            //cv::threshold(*data8, *contourImage, 128, 255, CV_THRESH_BINARY);
-            cv::GaussianBlur(*data8, *data8, cv::Size(5, 5), 5);
-            //cv::Canny(*data8, *contourImage, CANNY_LOWER, 3 * CANNY_LOWER, 3);
-            //cv::Sobel(*data8, *contourImage, -1, 1, 0);
-            cv::Laplacian(*data8, *laplace16, CV_16SC1, 3);
-            cv::convertScaleAbs(*laplace16, *contourImage);
-            /*
-            cv::findContours(*data8, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+            cv::ocl::GaussianBlur(*oclData, *oclData, cv::Size(3, 3), 2);
+
+            /*cv::findContours(*contourImage, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
 
             for (uint k = 0; k < contours.size(); k ++) {
                 if (contours.at(k).size() > 10) {
@@ -124,7 +111,12 @@ public:
                 }
             }*/
 
+            oclData->download(*contourImage);
+
             delete data8;
+
+            //delete laplace16;
+            delete oclData;
 
             _loaderData.ctImages->at(i) = contourImage;
         }
@@ -173,8 +165,8 @@ DicomReader::DicomReader(QObject * parent) :
     QObject(parent),
     _imageNumber(0) {
     if (!initOpenCL()) {
-        cv::namedWindow(WINDOW_CONTOUR_IMAGE, cv::WINDOW_AUTOSIZE | cv::WINDOW_OPENGL);
-        cv::namedWindow(WINDOW_DICOM_IMAGE, cv::WINDOW_AUTOSIZE | cv::WINDOW_OPENGL);
+        cv::namedWindow(WINDOW_CONTOUR_IMAGE, cv::WINDOW_AUTOSIZE);//| cv::WINDOW_OPENGL);
+        cv::namedWindow(WINDOW_DICOM_IMAGE, cv::WINDOW_AUTOSIZE);// | cv::WINDOW_OPENGL);
     }
     else {
         std::cerr << "OpenCL is not initialized... aborted" << std::endl;
@@ -316,7 +308,7 @@ void DicomReader::incImageNumber() {
 void DicomReader::showImageWithNumber(const int & imageNumber) {
     cv::imshow(WINDOW_CONTOUR_IMAGE, *(_ctImages[imageNumber]));
     cv::imshow(WINDOW_DICOM_IMAGE, *(_images[imageNumber]));
-    cv::waitKey(10);
+    cv::waitKey(1);
 }
 
 QImage DicomReader::dQImage() {
