@@ -45,9 +45,15 @@ QMAKE_CXXFLAGS += -std=c++0x
 
 SOURCES += src/main.cpp\
         src/mainwindow.cpp\
-        src/dicomreader.cpp
+        src/dicomreader.cpp\
+        src/normal.cpp\
+        src/GaussDeriv.cpp\
+        src/StegerLines.cpp
 
 HEADERS  += include/mainwindow.h\
-            include/dicomreader.h
+            include/dicomreader.h\
+            include/normal.h\
+            include/GaussDeriv.h\
+            include/StegerLines.h
 
 FORMS    += ui/mainwindow.ui

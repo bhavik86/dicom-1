@@ -8,9 +8,8 @@ typedef uint32_t u_int32_t;
 
 #endif
 
-#include "CL/cl.hpp"
-
 #include "dicomreader.h"
+#include "StegerLines.h"
 
 #include "gdcmReader.h"
 #include "gdcmImageReader.h"
@@ -19,12 +18,17 @@ typedef uint32_t u_int32_t;
 #include "gdcmStringFilter.h"
 #include "gdcmDICOMDIR.h"
 
+
 #define WINDOW_DICOM_IMAGE "ctimage"
 #define WINDOW_CONTOUR_IMAGE "contour"
+#define WINDOW_RADON_2D "sinogram2d"
+
+#define RADON_DEGREE_RANGE 180
 
 typedef struct _LoaderData {
     std::vector<cv::/*ocl::ocl*/Mat*> * ctImages;
     std::vector<cv::Mat*> * images;
+    std::vector<cv::Mat*> * sinograms;
     int bytesAllocated;
     int width;
     int height;
@@ -83,40 +87,92 @@ public:
                 }
             }
 
-            //cv::resize(*data, *data, cv::Size(_loaderData.width / 2, _loaderData.height / 2));
+            int width = _loaderData.width / 2;
+            int height = _loaderData.height / 2;
+            cv::resize(*data, *data, cv::Size(width, height));
+
             //cv::GaussianBlur(*data, *data, cv::Size(9, 9), 5);
             //cv::dilate(*data, *data, cv::Mat(3, 3, CV_8UC1));
             //cv::Scharr(*data, *data, -1, 1, 0);
 
-            cv::Mat * data8 = new cv::Mat(_loaderData.width, _loaderData.height, CV_8UC1);
-            data->convertTo(*data8, CV_8UC1, 1/256.0);
+            cv::Mat data8(width, height, CV_8UC1);
+            data->convertTo(data8, CV_8UC1, 1/256.0);
 
             _loaderData.images->at(i) = data;
 
-            cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data8);
+            //cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data8);
 
             std::vector<std::vector<cv::Point> > contours;
             std::vector<cv::Vec4i> hierarchy;
 
-            cv::Mat * contourImage = new cv::Mat(_loaderData.width, _loaderData.height, CV_16UC1, cv::Scalar(0));
-            //cv::Mat * laplace16 = new cv::Mat(_loaderData.width, _loaderData.height, CV_8UC1, cv::Scalar(0));
+            cv::Mat * contourImage = new cv::Mat(cv::Mat::zeros(height, width, CV_8UC1));
 
-            cv::ocl::GaussianBlur(*oclData, *oclData, cv::Size(3, 3), 2);
+            cv::GaussianBlur(data8, *contourImage, cv::Size(5, 5), 5);
 
-            /*cv::findContours(*contourImage, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE, cv::Point(0, 0));
+
+            //---radon---//
+            /*
+            int diag = ceil(sqrt(_loaderData.width * _loaderData.width + _loaderData.height * _loaderData.height));
+            int widthPad = ceil(diag - _loaderData.width) + 2;
+            int heightPad = ceil(diag - _loaderData.height) + 2;
+            */
+
+            // all around borders is black, so no need in eleborate size calculation as above
+            int widthPad = 10;
+            int heightPad = 10;
+
+            cv::Mat * imgPad = new cv::Mat(cv::Mat::zeros(height + heightPad, width + widthPad, CV_16UC1));
+            cv::Mat * sinogram = new cv::Mat(cv::Mat::zeros(height + heightPad, 0, CV_32FC1));
+
+            data->copyTo((*imgPad)(cv::Rect(ceil(widthPad / 2.0), ceil(heightPad / 2.0), width, height)));
+            cv::Point2i center = cv::Point2i((width + widthPad) / 2, (height + heightPad) / 2);
+
+            cv::Mat rotationMatrix;
+            cv::Mat colSum(cv::Mat::zeros(imgPad->cols, 1, CV_32FC1));
+
+            for (int angle = 0; angle != RADON_DEGREE_RANGE; angle ++) {
+                rotationMatrix = cv::getRotationMatrix2D(center, angle, 1.0);
+                cv::warpAffine(*imgPad, *imgPad, rotationMatrix, cv::Size(imgPad->rows, imgPad->cols));
+
+                cv::reduce(*imgPad, colSum, 0, CV_REDUCE_SUM, CV_32FC1);
+
+                sinogram->push_back(colSum);
+                //colSum.col(angle).copyTo(sinogram->col(angle));
+                //sinogram->col(angle) = colSum * 1;
+
+            }
+
+            delete data;
+
+            _loaderData.images->at(i) = imgPad;
+
+            _loaderData.sinograms->at(i) = sinogram;
+
+            //cv::medianBlur(*data8, *contourImage, 5);
+            //cv::Canny(*contourImage, *contourImage, CANNY_LOWER, 3 * CANNY_LOWER, 3);
+
+            //cv::threshold(*contourImage, *contourImage, 250, 255, CV_THRESH_OTSU);
+            //cv::dilate(*contourImage, *contourImage, 19);
+
+            //cv::Mat * steger = new cv::Mat();
+            //stegerEdges(*contourImage, *steger, 5, 0, 10.0);
+
+            //cv::adaptiveThreshold(*contourImage, *contourImage, 200, CV_ADAPTIVE_THRESH_GAUSSIAN_C, CV_THRESH_BINARY, 3, 1);
+            /*
+            cv::findContours(*contourImage, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_TC89_KCOS, cv::Point(0, 0));
 
             for (uint k = 0; k < contours.size(); k ++) {
-                if (contours.at(k).size() > 10) {
+                if (contours.at(k).size() > 300) {
                     cv::drawContours(*contourImage, contours, k, cv::Scalar(0x00FF), 2, 8, hierarchy, 0, cv::Point());
                 }
-            }*/
+            }
+            */
 
-            oclData->download(*contourImage);
 
-            delete data8;
+            //oclData->download(*contourImage);
 
-            //delete laplace16;
-            delete oclData;
+            //delete contourImage;
+            //delete oclData;
 
             _loaderData.ctImages->at(i) = contourImage;
         }
@@ -181,24 +237,27 @@ DicomReader::DicomReader(const QString & dicomFile, QObject * parent) :
 }
 
 DicomReader::~DicomReader() {
-    reset(_ctImages, _images);
+    reset(_ctImages, _images, _sinograms);
 }
 
 void DicomReader::reset(std::vector<cv::Mat*> & ctImages,
-                        std::vector<cv::Mat*> & images) {
+                        std::vector<cv::Mat*> & images,
+                        std::vector<cv::Mat*> &sinograms) {
     qDeleteAll(ctImages.begin(), ctImages.end());
     ctImages.clear();
     qDeleteAll(images.begin(), images.end());
     images.clear();
+    qDeleteAll(sinograms.begin(), sinograms.end());
+    sinograms.clear();
 }
 
 int DicomReader::gImageToMat(const gdcm::Image & gImage, std::vector<cv::Mat*> & ctImages,
-                             std::vector<cv::Mat*> & images) {
+                             std::vector<cv::Mat*> & images, std::vector<cv::Mat*> & sinograms) {
 
     int imagesCount = gImage.GetDimension(2);
 
     //clear previous "garbage"
-    reset(ctImages, images);
+    reset(ctImages, images, sinograms);
 
     std::vector<char>vbuffer;
     vbuffer.resize(gImage.GetBufferLength());
@@ -207,10 +266,12 @@ int DicomReader::gImageToMat(const gdcm::Image & gImage, std::vector<cv::Mat*> &
     gImage.GetBuffer(buffer);
     ctImages.resize(imagesCount);
     images.resize(imagesCount);
+    sinograms.resize(imagesCount);
 
     LoaderData loaderData;
     loaderData.ctImages = &ctImages;
     loaderData.images = &images;
+    loaderData.sinograms = &sinograms;
     //MONOCHROME2
 
     gdcm::PhotometricInterpretation photometricInterpretation = gImage.GetPhotometricInterpretation();
@@ -283,7 +344,7 @@ int DicomReader::readFile(const QString & dicomFile) {
         return DICOM_FILE_NOT_READABLE;
     }
 */
-    gImageToMat(dImage, _ctImages, _images);
+    gImageToMat(dImage, _ctImages, _images, _sinograms);
 
     //findContours(_dClImages, _contourImages);
 
@@ -308,6 +369,7 @@ void DicomReader::incImageNumber() {
 void DicomReader::showImageWithNumber(const int & imageNumber) {
     cv::imshow(WINDOW_CONTOUR_IMAGE, *(_ctImages[imageNumber]));
     cv::imshow(WINDOW_DICOM_IMAGE, *(_images[imageNumber]));
+    cv::imshow(WINDOW_RADON_2D, *(_sinograms[imageNumber]));
     cv::waitKey(1);
 }
 
