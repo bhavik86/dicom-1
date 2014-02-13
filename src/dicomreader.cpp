@@ -13,17 +13,15 @@ typedef uint32_t u_int32_t;
 
 #include "gdcmReader.h"
 #include "gdcmImageReader.h"
-#include "gdcmSmartPointer.h"
+#include "gdcmAttribute.h"
 #include "gdcmDataSetHelper.h"
 #include "gdcmStringFilter.h"
-#include "gdcmDICOMDIR.h"
-
 
 #define WINDOW_DICOM_IMAGE "ctimage"
 #define WINDOW_CONTOUR_IMAGE "contour"
 #define WINDOW_RADON_2D "sinogram2d"
 
-#define RADON_DEGREE_RANGE 180
+#define RADON_DEGREE_RANGE 45
 
 typedef struct _LoaderData {
     std::vector<cv::/*ocl::ocl*/Mat*> * ctImages;
@@ -34,6 +32,12 @@ typedef struct _LoaderData {
     int height;
     int offset;
     int type;
+
+    int64_t minValue;
+    int64_t maxValue;
+    int64_t windowCenter;
+    int64_t windowWidth;
+
     bool isLittleEndian;
     bool inverseNeeded;
     double slope;
@@ -76,13 +80,27 @@ public:
 
                     bufferImageI += _loaderData.bytesAllocated;
 
-                    //MONOCHROME2 - high value -> brighter, -1 high -> blacker
 
-                    if (_loaderData.inverseNeeded) {
-                        data->at<T>(x, y) = ~(T)(_loaderData.slope * pixel + _loaderData.intercept);
+                    /* similar as http://code.google.com/p/pydicom/source/browse/source/dicom/contrib/pydicom_PIL.py*/
+                    pixel = _loaderData.slope * pixel + _loaderData.intercept;
+
+                    if (pixel <= (_loaderData.windowCenter - 0.5 - (_loaderData.windowWidth - 1) / 2.0)) {
+                        pixel = (T)_loaderData.minValue;
+                    }
+                    else if (pixel > (_loaderData.windowCenter - 0.5 + (_loaderData.windowWidth - 1) / 2.0)) {
+                        pixel = (T)_loaderData.maxValue;
                     }
                     else {
-                        data->at<T>(x, y) = _loaderData.slope * pixel + _loaderData.intercept;
+                        pixel = ((pixel - _loaderData.windowCenter + 0.5) / (_loaderData.windowWidth - 1) + 0.5) *
+                                (_loaderData.maxValue - _loaderData.minValue);
+                    }
+
+                    //MONOCHROME2 - high value -> brighter, -1 high -> blacker
+                    if (_loaderData.inverseNeeded) {
+                        data->at<T>(x, y) = ~pixel;
+                    }
+                    else {
+                        data->at<T>(x, y) = pixel;
                     }
                 }
             }
@@ -98,6 +116,8 @@ public:
             cv::Mat data8(width, height, CV_8UC1);
             data->convertTo(data8, CV_8UC1, 1/256.0);
 
+            //cv::threshold(data8, data8, 100, 0xFFFF, CV_THRESH_BINARY);
+
             _loaderData.images->at(i) = data;
 
             //cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data8);
@@ -109,17 +129,15 @@ public:
 
             cv::GaussianBlur(data8, *contourImage, cv::Size(5, 5), 5);
 
-
             //---radon---//
-            /*
-            int diag = ceil(sqrt(_loaderData.width * _loaderData.width + _loaderData.height * _loaderData.height));
-            int widthPad = ceil(diag - _loaderData.width) + 2;
-            int heightPad = ceil(diag - _loaderData.height) + 2;
-            */
+          /*  int diag = ceil(sqrt(width * width + height * height));
+            int widthPad = ceil(diag - width) + 2;
+            int heightPad = ceil(diag - height) + 2;
+
 
             // all around borders is black, so no need in eleborate size calculation as above
-            int widthPad = 10;
-            int heightPad = 10;
+            //int widthPad = 10;
+            //int heightPad = 10;
 
             cv::Mat * imgPad = new cv::Mat(cv::Mat::zeros(height + heightPad, width + widthPad, CV_16UC1));
             cv::Mat * sinogram = new cv::Mat(cv::Mat::zeros(height + heightPad, 0, CV_32FC1));
@@ -131,8 +149,8 @@ public:
             cv::Mat colSum(cv::Mat::zeros(imgPad->cols, 1, CV_32FC1));
 
             for (int angle = 0; angle != RADON_DEGREE_RANGE; angle ++) {
-                rotationMatrix = cv::getRotationMatrix2D(center, angle, 1.0);
-                cv::warpAffine(*imgPad, *imgPad, rotationMatrix, cv::Size(imgPad->rows, imgPad->cols));
+                rotationMatrix = cv::getRotationMatrix2D(center, 1.0, 1.0);
+                cv::warpAffine(*imgPad, *imgPad, rotationMatrix, cv::Size(imgPad->rows, imgPad->cols), INTER_CUBIC, BORDER_TRANSPARENT, 0);
 
                 cv::reduce(*imgPad, colSum, 0, CV_REDUCE_SUM, CV_32FC1);
 
@@ -147,7 +165,7 @@ public:
             _loaderData.images->at(i) = imgPad;
 
             _loaderData.sinograms->at(i) = sinogram;
-
+*/
             //cv::medianBlur(*data8, *contourImage, 5);
             //cv::Canny(*contourImage, *contourImage, CANNY_LOWER, 3 * CANNY_LOWER, 3);
 
@@ -179,6 +197,48 @@ public:
 
     }
 };
+
+typedef struct _SinogramData {
+    std::vector<cv::Mat*> ctImages;
+    cv::Mat * sinogram;
+
+    int rows;
+    int cols;
+}SinogramData;
+
+class SinogramMaker : public cv::ParallelLoopBody {
+private:
+    SinogramData _sinogramData;
+public:
+    SinogramMaker(SinogramData & sinogramData) : _sinogramData(sinogramData) {
+        _sinogramData.rows = _sinogramData.ctImages.at(0)->rows;
+        _sinogramData.cols = _sinogramData.ctImages.at(0)->cols;
+    }
+
+    virtual void operator ()(const cv::Range & r) const {
+        //---radon---//
+        for (register int i = r.start; i < r.end; i ++) {
+            cv::Mat colSum(cv::Mat::zeros(_sinogramData.cols, 1, CV_32FC1));
+            cv::reduce(*_sinogramData.ctImages.at(i), colSum, 0, CV_REDUCE_SUM, CV_32FC1);
+
+            colSum.row(0).copyTo(_sinogramData.sinogram->row(i));
+        }
+    }
+};
+
+DicomReader::DicomReader(QObject * parent) :
+    QObject(parent),
+    _imageNumber(0),
+    _sinogram(NULL) {
+    if (!initOpenCL()) {
+        cv::namedWindow(WINDOW_CONTOUR_IMAGE, cv::WINDOW_AUTOSIZE);//| cv::WINDOW_OPENGL);
+        cv::namedWindow(WINDOW_DICOM_IMAGE, cv::WINDOW_AUTOSIZE);// | cv::WINDOW_OPENGL);
+    }
+    else {
+        std::cerr << "OpenCL is not initialized... aborted" << std::endl;
+        exit(0);
+    }
+}
 
 int DicomReader::initOpenCL() {
     cv::ocl::PlatformsInfo platforms;
@@ -217,64 +277,77 @@ int DicomReader::initOpenCL() {
     }
 }
 
-DicomReader::DicomReader(QObject * parent) :
-    QObject(parent),
-    _imageNumber(0) {
-    if (!initOpenCL()) {
-        cv::namedWindow(WINDOW_CONTOUR_IMAGE, cv::WINDOW_AUTOSIZE);//| cv::WINDOW_OPENGL);
-        cv::namedWindow(WINDOW_DICOM_IMAGE, cv::WINDOW_AUTOSIZE);// | cv::WINDOW_OPENGL);
-    }
-    else {
-        std::cerr << "OpenCL is not initialized... aborted" << std::endl;
-        exit(0);
-    }
-
-}
-
 DicomReader::DicomReader(const QString & dicomFile, QObject * parent) :
     DicomReader(parent) {
     readFile(dicomFile);
 }
 
 DicomReader::~DicomReader() {
-    reset(_ctImages, _images, _sinograms);
+    reset(_ctImages, _images, _sinograms, &_sinogram);
 }
 
 void DicomReader::reset(std::vector<cv::Mat*> & ctImages,
                         std::vector<cv::Mat*> & images,
-                        std::vector<cv::Mat*> &sinograms) {
+                        std::vector<cv::Mat*> & sinograms,
+                        cv::Mat ** sinogram) {
     qDeleteAll(ctImages.begin(), ctImages.end());
     ctImages.clear();
     qDeleteAll(images.begin(), images.end());
     images.clear();
     qDeleteAll(sinograms.begin(), sinograms.end());
     sinograms.clear();
+    if (*sinogram != NULL) {
+        delete *sinogram;
+    }
 }
 
-int DicomReader::gImageToMat(const gdcm::Image & gImage, std::vector<cv::Mat*> & ctImages,
-                             std::vector<cv::Mat*> & images, std::vector<cv::Mat*> & sinograms) {
-
-    int imagesCount = gImage.GetDimension(2);
+int DicomReader::readImage(gdcm::File & dFile, const gdcm::Image & dImage, std::vector<cv::Mat*> & ctImages,
+                             std::vector<cv::Mat*> & images, std::vector<cv::Mat*> & sinograms, cv::Mat ** sinogram) {
 
     //clear previous "garbage"
-    reset(ctImages, images, sinograms);
+    reset(ctImages, images, sinograms, sinogram);
 
     std::vector<char>vbuffer;
-    vbuffer.resize(gImage.GetBufferLength());
+    vbuffer.resize(dImage.GetBufferLength());
     char * buffer = &vbuffer[0];
 
-    gImage.GetBuffer(buffer);
+    gdcm::StringFilter dStringFilter;
+    dStringFilter.SetFile(dFile);
+
+    gdcm::DataSet & dDataSet = dFile.GetDataSet();
+
+    LoaderData loaderData;
+
+    gdcm::Tag tagFind(0x0028, 0x1050);
+    if (dDataSet.FindDataElement(tagFind)) {
+        loaderData.windowCenter = std::stoi(dStringFilter.ToString(tagFind));
+    }
+    else {
+        loaderData.windowCenter = 0;
+    }
+
+    tagFind.SetElementTag(0x0028, 0x1051);
+    if (dDataSet.FindDataElement(tagFind)) {
+        loaderData.windowWidth = std::stoi(dStringFilter.ToString(tagFind));
+    }
+    else {
+        loaderData.windowWidth = 0;
+    }
+
+    int imagesCount = dImage.GetDimension(2);
+
+    dImage.GetBuffer(buffer);
     ctImages.resize(imagesCount);
     images.resize(imagesCount);
     sinograms.resize(imagesCount);
 
-    LoaderData loaderData;
     loaderData.ctImages = &ctImages;
     loaderData.images = &images;
     loaderData.sinograms = &sinograms;
     //MONOCHROME2
 
-    gdcm::PhotometricInterpretation photometricInterpretation = gImage.GetPhotometricInterpretation();
+    gdcm::PhotometricInterpretation photometricInterpretation = dImage.GetPhotometricInterpretation();
+
     if (photometricInterpretation == gdcm::PhotometricInterpretation::MONOCHROME2) {
         loaderData.inverseNeeded = true;
     }
@@ -282,24 +355,26 @@ int DicomReader::gImageToMat(const gdcm::Image & gImage, std::vector<cv::Mat*> &
         loaderData.inverseNeeded = false;
     }
 
-    gdcm::PixelFormat pixelFormat = gImage.GetPixelFormat();
+    gdcm::PixelFormat pixelFormat = dImage.GetPixelFormat();
     if (pixelFormat.GetScalarType() == gdcm::PixelFormat::UINT16) {
         loaderData.type = CV_16UC1;
     }
     loaderData.bytesAllocated = pixelFormat.GetBitsAllocated() / 8;
+    loaderData.minValue = pixelFormat.GetMin();
+    loaderData.maxValue = pixelFormat.GetMax();
 
     loaderData.isLittleEndian = (pixelFormat.GetBitsAllocated() - pixelFormat.GetHighBit() == 1) ? true : false;
 
-    loaderData.width = gImage.GetDimension(0);
-    loaderData.height = gImage.GetDimension(1);
+    loaderData.width = dImage.GetDimension(0);
+    loaderData.height = dImage.GetDimension(1);
 
-    if (pixelFormat.GetSamplesPerPixel() == 1) {
+    try {
+        loaderData.slope = dImage.GetSlope();
+        loaderData.intercept = dImage.GetIntercept();
+    }
+    catch(...) {
         loaderData.slope = 1.0;
         loaderData.intercept = 0.0;
-    }
-    else {
-        loaderData.slope = gImage.GetSlope();
-        loaderData.intercept = gImage.GetIntercept();
     }
 
     loaderData.buffer = buffer;
@@ -311,10 +386,25 @@ int DicomReader::gImageToMat(const gdcm::Image & gImage, std::vector<cv::Mat*> &
 
     cv::parallel_for_(cv::Range(0, imagesCount), ParallelLoader<u_int16_t>(loaderData));
 
-    std::cout << "processing done" << std::endl;
+    std::cout << "loading done" << std::endl;
+
+    createSinogram(ctImages, sinogram);
+
+    std::cout << "sinogram done" << std::endl;
     showImageWithNumber(0);
 
     return DICOM_ALL_OK;
+}
+
+void DicomReader::createSinogram(const std::vector<Mat*> & ctImages, cv::Mat ** sinogram) {
+    SinogramData sinogramData;
+
+    *sinogram = new cv::Mat(cv::Mat::zeros(ctImages.size(), ctImages.at(0)->cols, CV_32FC1));
+
+    sinogramData.ctImages = ctImages;
+    sinogramData.sinogram = *sinogram;
+
+    cv::parallel_for_(cv::Range(0, ctImages.size()), SinogramMaker(sinogramData));
 }
 
 int DicomReader::readFile(const QString & dicomFile) {
@@ -326,28 +416,12 @@ int DicomReader::readFile(const QString & dicomFile) {
         return DICOM_FILE_NOT_READABLE;
     }
 
-  //  gdcm::File & dFile = dIReader.GetFile();
+    gdcm::File & dFile = dIReader.GetFile();
     gdcm::Image & dImage = dIReader.GetImage();
-/*
-    gdcm::StringFilter dStringFilter;
-    dStringFilter.SetFile(dFile);
 
-    gdcm::FileMetaInformation & dHeader = dFile.GetHeader();
-
-    gdcm::Tag tagTransfSyntax(0x0002, 0x0010);
-    if (dHeader.FindDataElement(tagTransfSyntax)) {
-        //gdcm::DataElement & dTransfSyntax = dHeader.GetDataElement(tagTransfSyntax);
-        //1.2.840.10008.1.2.4.70 - JPEG Lossless process 14
-        std::cout << dStringFilter.ToString(tagTransfSyntax) << std::endl;
-    }
-    else {
-        return DICOM_FILE_NOT_READABLE;
-    }
-*/
-    gImageToMat(dImage, _ctImages, _images, _sinograms);
+    readImage(dFile, dImage, _ctImages, _images, _sinograms, &_sinogram);
 
     //findContours(_dClImages, _contourImages);
-
 
   /*  if (dHeader.FindDataElement(gdcm::Tag(0x2, 0x13))) {
         gdcm::DataElement & dE = dHeader.GetDataElement(gdcm::Tag(0x2, 0x13));
@@ -369,7 +443,8 @@ void DicomReader::incImageNumber() {
 void DicomReader::showImageWithNumber(const int & imageNumber) {
     cv::imshow(WINDOW_CONTOUR_IMAGE, *(_ctImages[imageNumber]));
     cv::imshow(WINDOW_DICOM_IMAGE, *(_images[imageNumber]));
-    cv::imshow(WINDOW_RADON_2D, *(_sinograms[imageNumber]));
+
+    cv::imshow(WINDOW_RADON_2D, *_sinogram);
     cv::waitKey(1);
 }
 

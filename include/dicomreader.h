@@ -6,6 +6,7 @@
 #include <QImage>
 
 #include "gdcmImage.h"
+#include "gdcmFile.h"
 
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -27,8 +28,12 @@ public:
 
   ~DicomReader();
 
-  int gImageToMat(const gdcm::Image & gImage, std::vector<cv::/*ocl::ocl*/Mat*> & ctImages, std::vector<cv::Mat *> &images,
-                  std::vector<cv::Mat*> & sinograms);
+  int readImage(gdcm::File &dFile,
+                  const gdcm::Image & dImage,
+                  std::vector<cv::/*ocl::ocl*/Mat*> & ctImages,
+                  std::vector<cv::Mat *> &images,
+                  std::vector<cv::Mat*> & sinograms,
+                  cv::Mat ** sinogram);
 
   QImage dQImage();
   cv::Mat dCImage();
@@ -38,7 +43,8 @@ public:
 
   void reset(std::vector<cv::Mat*> & ctImages,
              std::vector<cv::Mat*> & images,
-             std::vector<cv::Mat*> & sinograms);
+             std::vector<cv::Mat*> & sinograms,
+             cv::Mat ** sinogram);
 
 private:
   int _imageNumber;
@@ -46,10 +52,13 @@ private:
   std::vector<cv::/*ocl::ocl*/Mat*>_ctImages;
   std::vector<cv::Mat*>_images;
   std::vector<cv::Mat*>_sinograms;
+  cv::Mat * _sinogram;
 
   cv::ocl::Context * _context;
 
   int initOpenCL();
+
+  void createSinogram(const std::vector<cv::Mat*> & ctImages, cv::Mat ** sinogram);
 
   void showImageWithNumber(const int & imageNumber);
 
