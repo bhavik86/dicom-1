@@ -54,6 +54,7 @@ HEADERS  += include/mainwindow.h\
             include/dicomreader.h\
             include/normal.h\
             include/GaussDeriv.h\
-            include/StegerLines.h
+            include/StegerLines.h \
+    include/ctprocessing.hpp
 
 FORMS    += ui/mainwindow.ui

@@ -32,8 +32,7 @@ public:
                   const gdcm::Image & dImage,
                   std::vector<cv::/*ocl::ocl*/Mat*> & ctImages,
                   std::vector<cv::Mat *> &images,
-                  std::vector<cv::Mat*> & sinograms,
-                  cv::Mat ** sinogram);
+                  std::vector<cv::Mat*> & sinograms);
 
   QImage dQImage();
   cv::Mat dCImage();
@@ -43,8 +42,7 @@ public:
 
   void reset(std::vector<cv::Mat*> & ctImages,
              std::vector<cv::Mat*> & images,
-             std::vector<cv::Mat*> & sinograms,
-             cv::Mat ** sinogram);
+             std::vector<cv::Mat*> & sinograms);
 
 private:
   int _imageNumber;
@@ -52,13 +50,10 @@ private:
   std::vector<cv::/*ocl::ocl*/Mat*>_ctImages;
   std::vector<cv::Mat*>_images;
   std::vector<cv::Mat*>_sinograms;
-  cv::Mat * _sinogram;
 
   cv::ocl::Context * _context;
 
   int initOpenCL();
-
-  void createSinogram(const std::vector<cv::Mat*> & ctImages, cv::Mat ** sinogram);
 
   void showImageWithNumber(const int & imageNumber);
 
