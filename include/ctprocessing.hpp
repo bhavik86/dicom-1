@@ -34,16 +34,19 @@ class CtProcessing : public cv::ParallelLoopBody {
 private:
     CtData _ctData;
 
-    static inline cv::Mat radon(const cv::Mat & ctImage,
+    static inline cv::Mat radon(const cv::Mat & ctImage, const int & theta,
                          const int & width, const int & height,
                          const int & widthPad, const int & heightPad) {
 
         cv::Mat imgPad(cv::Mat::zeros(height + heightPad, width + widthPad, CV_16UC1));
-        cv::Mat imgPadRotated(cv::Mat::zeros(height + heightPad, width + widthPad, CV_16UC1));
+        cv::Mat imgPad8(cv::Mat::zeros(height + heightPad, width + widthPad, CV_8UC1));
+        cv::Mat imgPadRotated(cv::Mat::zeros(height + heightPad, width + widthPad, CV_8UC1));
 
         cv::Mat sinogram(cv::Mat::zeros(height + heightPad, 0, CV_32FC1));
 
         ctImage.copyTo(imgPad(cv::Rect(ceil(widthPad / 2.0), ceil(heightPad / 2.0), width, height)));
+
+        imgPad.convertTo(imgPad8, CV_8UC1, 1/256.0);
         cv::Point2i center = cv::Point2i((width + widthPad) / 2, (height + heightPad) / 2);
 
         cv::Mat rotationMatrix;
@@ -51,10 +54,16 @@ private:
 
         cv::Size size(imgPad.rows, imgPad.cols);
 
-        for (int angle = 0; angle != RADON_DEGREE_RANGE; angle ++) {
-            rotationMatrix = cv::getRotationMatrix2D(center, angle, 1.0);
-            cv::warpAffine(imgPad, imgPadRotated, rotationMatrix, size, INTER_LINEAR | WARP_INVERSE_MAP, BORDER_TRANSPARENT);
+        cv::ocl::oclMat imgPadOcl(imgPad8);
+        cv::ocl::oclMat imgPadRotatedOcl(imgPadRotated);
 
+        for (int angle = 0; angle != theta; angle ++) {
+            rotationMatrix = cv::getRotationMatrix2D(center, angle, 1.0);
+            //cv::warpAffine(imgPad, imgPadRotated, rotationMatrix, size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP, cv::BORDER_TRANSPARENT);
+
+            cv::ocl::warpAffine(imgPadOcl, imgPadRotatedOcl, rotationMatrix, size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP);
+
+            imgPadRotatedOcl.download(imgPadRotated);
             cv::reduce(imgPadRotated, colSum, 0, CV_REDUCE_SUM, CV_32FC1);
             sinogram.push_back(colSum);
         }
@@ -62,6 +71,16 @@ private:
         return sinogram;
     }
 
+    static inline cv::Mat backproject(const cv::Mat & sinogram,
+                         const int & width, const int & height) {
+        cv::Mat backproj(cv::Mat::zeros(width, height, CV_16UC1));
+
+        for (int angle = 0; angle != sinogram.rows; angle ++) {
+
+        }
+
+        return backproject;
+    }
 
 public:
     CtProcessing(CtData & ctData) : _ctData(ctData) {
@@ -69,8 +88,8 @@ public:
     }
 
     virtual void operator ()(const cv::Range & r) const {
-        int width = _ctData.width / 2;
-        int height = _ctData.height / 2;
+        int width = _ctData.width / 1;
+        int height = _ctData.height / 1;
 
         int pad = std::max(width, height);
 
@@ -146,7 +165,7 @@ public:
 
             //---radon---//
 
-            cv::Mat * sinogram = new cv::Mat(radon(*data, width, height, widthPad, heightPad));
+            cv::Mat * sinogram = new cv::Mat(radon(*data, RADON_DEGREE_RANGE, width, height, widthPad, heightPad));
             delete data;
 
             _ctData.images->at(i) = contourImage;

@@ -11,8 +11,6 @@ typedef uint32_t u_int32_t;
 #include "dicomreader.h"
 #include "StegerLines.h"
 
-#include "ctprocessing.hpp"
-
 #include "gdcmReader.h"
 #include "gdcmImageReader.h"
 #include "gdcmAttribute.h"
@@ -217,8 +215,4 @@ void DicomReader::showImageWithNumber(const int & imageNumber) {
     //cv::imshow(WINDOW_DICOM_IMAGE, *(_images[imageNumber]));
     cv::imshow(WINDOW_RADON_2D, *(_sinograms[imageNumber]));
     cv::waitKey(1);
-}
-
-QImage DicomReader::dQImage() {
-    return _dQImage;
 }

@@ -3,14 +3,12 @@
 
 #include <QObject>
 
-#include <QImage>
-
 #include "gdcmImage.h"
 #include "gdcmFile.h"
 
-#include "opencv2/imgproc/imgproc.hpp"
+#include "ctprocessing.hpp"
+
 #include "opencv2/highgui/highgui.hpp"
-#include "opencv2/ocl/ocl.hpp"
 
 #define DICOM_ALL_OK 0
 #define DICOM_FILE_NOT_READABLE 1
@@ -46,7 +44,6 @@ public:
 
 private:
   int _imageNumber;
-  QImage _dQImage;
   std::vector<cv::/*ocl::ocl*/Mat*>_ctImages;
   std::vector<cv::Mat*>_images;
   std::vector<cv::Mat*>_sinograms;
