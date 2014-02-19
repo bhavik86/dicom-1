@@ -34,52 +34,78 @@ class CtProcessing : public cv::ParallelLoopBody {
 private:
     CtData _ctData;
 
-    static inline cv::Mat radon(const cv::Mat & ctImage, const int & theta,
-                         const int & width, const int & height,
-                         const int & widthPad, const int & heightPad) {
+    static inline cv::Mat radon(const cv::Mat & ctImage, const std::vector<cv::Mat> & rotationMatrix,
+                                const int & theta,
+                                const int & width, const int & height,
+                                const int & widthPad, const int & heightPad) {
 
-        cv::Mat imgPad(cv::Mat::zeros(height + heightPad, width + widthPad, CV_16UC1));
-        cv::Mat imgPad8(cv::Mat::zeros(height + heightPad, width + widthPad, CV_8UC1));
-        cv::Mat imgPadRotated(cv::Mat::zeros(height + heightPad, width + widthPad, CV_8UC1));
+        int wPad = width + widthPad;
+        int hPad = height + heightPad;
 
-        cv::Mat sinogram(cv::Mat::zeros(height + heightPad, 0, CV_32FC1));
+        cv::Mat imgPad(cv::Mat::zeros(hPad, wPad, CV_16UC1));
+        cv::Mat imgPadRotated(cv::Mat::zeros(hPad, wPad, CV_16UC1));
+
+        cv::Mat sinogram(cv::Mat::zeros(hPad, 0, CV_32FC1));
 
         ctImage.copyTo(imgPad(cv::Rect(ceil(widthPad / 2.0), ceil(heightPad / 2.0), width, height)));
 
-        imgPad.convertTo(imgPad8, CV_8UC1, 1/256.0);
-        cv::Point2i center = cv::Point2i((width + widthPad) / 2, (height + heightPad) / 2);
+  //      imgPad.convertTo(imgPad8, CV_8UC1, 1/256.0);
 
-        cv::Mat rotationMatrix;
         cv::Mat colSum(cv::Mat::zeros(imgPad.cols, 1, CV_32FC1));
 
         cv::Size size(imgPad.rows, imgPad.cols);
-
+/*
         cv::ocl::oclMat imgPadOcl(imgPad8);
         cv::ocl::oclMat imgPadRotatedOcl(imgPadRotated);
 
+*/
         for (int angle = 0; angle != theta; angle ++) {
-            rotationMatrix = cv::getRotationMatrix2D(center, angle, 1.0);
-            //cv::warpAffine(imgPad, imgPadRotated, rotationMatrix, size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP, cv::BORDER_TRANSPARENT);
-
+            cv::warpAffine(imgPad, imgPadRotated, rotationMatrix[angle],
+                           size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP, cv::BORDER_TRANSPARENT);
+/*
             cv::ocl::warpAffine(imgPadOcl, imgPadRotatedOcl, rotationMatrix, size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP);
-
             imgPadRotatedOcl.download(imgPadRotated);
+            */
+
             cv::reduce(imgPadRotated, colSum, 0, CV_REDUCE_SUM, CV_32FC1);
             sinogram.push_back(colSum);
+
         }
 
         return sinogram;
     }
 
-    static inline cv::Mat backproject(const cv::Mat & sinogram,
-                         const int & width, const int & height) {
-        cv::Mat backproj(cv::Mat::zeros(width, height, CV_16UC1));
+    static inline int rotCoord(const int & midIndex, const int & angle, const int & x, const int & y) {
+        return std::round(midIndex + x * std::sin(angle) * x + y * std::cos(angle));
+    }
 
-        for (int angle = 0; angle != sinogram.rows; angle ++) {
+    static inline cv::Mat backproject(const cv::Mat & sinogram) {
+        int paralProj = sinogram.cols;
+        int theta = sinogram.rows;
 
+        cv::Mat backproj(cv::Mat::zeros(paralProj, paralProj, CV_16UC1));
+
+        int midIndex = std::floor(paralProj / 2.0) + 1;
+
+        int rotX;
+        int xMin = - std::ceil(paralProj / 2.0);
+        int yMin = xMin;
+        int xMax = std::ceil(paralProj / 2.0 - 1);
+        int yMax = xMax;
+
+        for (int angle = 0; angle != theta; angle ++) {
+            for (int x = xMin; x != xMax; x ++) {
+                for (int y = yMin; y != yMax; y ++) {
+                    rotX = rotCoord(midIndex, (CV_PI / 180) * angle, x, y);
+                    if (rotX >= 0 && rotX < paralProj) {
+                        backproj.at<T>(x - xMin, y - yMin) +=
+                                (sinogram.at<float>(angle, rotX) / paralProj);
+                    }
+                }
+            }
         }
 
-        return backproject;
+        return backproj;
     }
 
 public:
@@ -88,13 +114,22 @@ public:
     }
 
     virtual void operator ()(const cv::Range & r) const {
-        int width = _ctData.width / 1;
-        int height = _ctData.height / 1;
+        int width = _ctData.width / 2;
+        int height = _ctData.height / 2;
 
+        //useful image is ellipsoid with ra rb as width and height,
+        //all black near corners - we loss this "garbage" during rotations - good riddance
         int pad = std::max(width, height);
 
         int widthPad = std::ceil((pad - width) / 2.0);
         int heightPad = std::ceil((pad - height) / 2.0);
+
+        std::vector<cv::Mat>rotationMatrix;
+
+        for (int angle = 0; angle < RADON_DEGREE_RANGE; angle ++) {
+            rotationMatrix.push_back(cv::getRotationMatrix2D(cv::Point2i((width + widthPad) / 2, (height + heightPad) / 2),
+                                                             angle, 1.0));
+        }
 
         for (register int i = r.start; i < r.end; i ++) {
 
@@ -165,11 +200,14 @@ public:
 
             //---radon---//
 
-            cv::Mat * sinogram = new cv::Mat(radon(*data, RADON_DEGREE_RANGE, width, height, widthPad, heightPad));
+            cv::Mat * sinogram = new cv::Mat(radon(*data, rotationMatrix, RADON_DEGREE_RANGE, width, height, widthPad, heightPad));
+
             delete data;
 
-            _ctData.images->at(i) = contourImage;
+            //cv::Mat * backprojection = new cv::Mat(backproject(*sinogram));
 
+            _ctData.images->at(i) = sinogram;
+            _ctData.ctImages->at(i) = contourImage;
             _ctData.sinograms->at(i) = sinogram;
 
             //cv::medianBlur(*data8, *contourImage, 5);
@@ -198,8 +236,6 @@ public:
 
             //delete contourImage;
             //delete oclData;
-
-            _ctData.ctImages->at(i) = contourImage;
         }
     }
 };

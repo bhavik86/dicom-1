@@ -17,18 +17,14 @@ typedef uint32_t u_int32_t;
 #include "gdcmDataSetHelper.h"
 #include "gdcmStringFilter.h"
 
-#define WINDOW_DICOM_IMAGE "ctimage"
-#define WINDOW_CONTOUR_IMAGE "contour"
+#define WINDOW_BACKPROJECT_IMAGE "backprojet"
+#define WINDOW_INPUT_IMAGE "input"
 #define WINDOW_RADON_2D "sinogram2d"
 
 DicomReader::DicomReader(QObject * parent) :
     QObject(parent),
     _imageNumber(0) {
-    if (!initOpenCL()) {
-        cv::namedWindow(WINDOW_CONTOUR_IMAGE, cv::WINDOW_AUTOSIZE);//| cv::WINDOW_OPENGL);
-        cv::namedWindow(WINDOW_DICOM_IMAGE, cv::WINDOW_AUTOSIZE);// | cv::WINDOW_OPENGL);
-    }
-    else {
+    if (initOpenCL()) {
         std::cerr << "OpenCL is not initialized... aborted" << std::endl;
         exit(0);
     }
@@ -178,6 +174,12 @@ int DicomReader::readImage(gdcm::File & dFile, const gdcm::Image & dImage, std::
 
     std::cout << "loading done" << std::endl;
 
+    cv::imwrite("ct.png", *(_ctImages[0]));
+
+    cv::namedWindow(WINDOW_BACKPROJECT_IMAGE, cv::WINDOW_AUTOSIZE);//| cv::WINDOW_OPENGL);
+    cv::namedWindow(WINDOW_INPUT_IMAGE, cv::WINDOW_AUTOSIZE);// | cv::WINDOW_OPENGL);
+    cv::namedWindow(WINDOW_RADON_2D, cv::WINDOW_AUTOSIZE);
+
     showImageWithNumber(0);
 
     return DICOM_ALL_OK;
@@ -211,8 +213,13 @@ void DicomReader::incImageNumber() {
 }
 
 void DicomReader::showImageWithNumber(const int & imageNumber) {
-    cv::imshow(WINDOW_CONTOUR_IMAGE, *(_ctImages[imageNumber]));
-    //cv::imshow(WINDOW_DICOM_IMAGE, *(_images[imageNumber]));
-    cv::imshow(WINDOW_RADON_2D, *(_sinograms[imageNumber]));
+    cv::imshow(WINDOW_INPUT_IMAGE, *(_ctImages[imageNumber]));
+    cv::imshow(WINDOW_BACKPROJECT_IMAGE, *(_images[imageNumber]));
+
+    // 32FC1 -> 16UC1, for user's eyes, delete in final version
+    cv::Mat data16(_sinograms[imageNumber]->cols, _sinograms[imageNumber]->rows, CV_16UC1);
+    _sinograms[imageNumber]->convertTo(data16, CV_16UC1, 1/256.0);
+
+    cv::imshow(WINDOW_RADON_2D, data16);
     cv::waitKey(1);
 }
