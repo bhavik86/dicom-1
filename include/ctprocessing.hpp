@@ -7,6 +7,8 @@
 
 #define RADON_DEGREE_RANGE 180
 
+float gradInRads = CV_PI / 180.0;
+
 typedef struct _CtData {
     std::vector<cv::/*ocl::ocl*/Mat*> * ctImages;
     std::vector<cv::Mat*> * images;
@@ -72,14 +74,13 @@ private:
 
         }
 
-        return sinogram;
+        cv::Mat sinogram16(wPad, hPad, CV_16UC1);
+        sinogram.convertTo(sinogram16, CV_16UC1, 1/256.0);
+
+        return sinogram16;
     }
 
-    static inline int rotCoord(const int & midIndex, const int & angle, const int & x, const int & y) {
-        return std::round(midIndex + x * std::sin(angle) * x + y * std::cos(angle));
-    }
-
-    static inline cv::Mat backproject(const cv::Mat & sinogram) {
+    static inline cv::Mat backproject(const cv::Mat & sinogram, const std::vector<float> & cosTable, const std::vector<float> & sinTable) {
         int paralProj = sinogram.cols;
         int theta = sinogram.rows;
 
@@ -92,14 +93,15 @@ private:
         int yMin = xMin;
         int xMax = std::ceil(paralProj / 2.0 - 1);
         int yMax = xMax;
+        int angleC = 0;
 
         for (int angle = 0; angle != theta; angle ++) {
+            angleC += gradInRads;
             for (int x = xMin; x != xMax; x ++) {
                 for (int y = yMin; y != yMax; y ++) {
-                    rotX = rotCoord(midIndex, (CV_PI / 180) * angle, x, y);
+                    rotX = std::round(midIndex + x * sinTable[angleC] * x + y * cosTable[angleC]);
                     if (rotX >= 0 && rotX < paralProj) {
-                        backproj.at<T>(x - xMin, y - yMin) +=
-                                (sinogram.at<float>(angle, rotX) / paralProj);
+                        backproj.at<T>(x - xMin, y - yMin) += (sinogram.at<T>(rotX, angle) / paralProj);
                     }
                 }
             }
@@ -125,6 +127,14 @@ public:
         int heightPad = std::ceil((pad - height) / 2.0);
 
         std::vector<cv::Mat>rotationMatrix;
+
+        std::vector<float>cosTable;
+        std::vector<float>sinTable;
+
+        for (int i = 0; i < RADON_DEGREE_RANGE; i ++) {
+            cosTable.push_back(std::cos(i));
+            sinTable.push_back(std::sin(i));
+        }
 
         for (int angle = 0; angle < RADON_DEGREE_RANGE; angle ++) {
             rotationMatrix.push_back(cv::getRotationMatrix2D(cv::Point2i((width + widthPad) / 2, (height + heightPad) / 2),
@@ -187,27 +197,18 @@ public:
             //cv::dilate(*data, *data, cv::Mat(3, 3, CV_8UC1));
             //cv::Scharr(*data, *data, -1, 1, 0);
 
-            cv::Mat data8(width, height, CV_8UC1);
-            data->convertTo(data8, CV_8UC1, 1/256.0);
-
             _ctData.images->at(i) = data;
 
             //cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data8);
-
-            cv::Mat * contourImage = new cv::Mat(cv::Mat::zeros(height, width, CV_8UC1));
-
-            cv::GaussianBlur(data8, *contourImage, cv::Size(5, 5), 5);
 
             //---radon---//
 
             cv::Mat * sinogram = new cv::Mat(radon(*data, rotationMatrix, RADON_DEGREE_RANGE, width, height, widthPad, heightPad));
 
-            delete data;
+            cv::Mat * backprojection = new cv::Mat(backproject(*sinogram, cosTable, sinTable));
 
-            //cv::Mat * backprojection = new cv::Mat(backproject(*sinogram));
-
-            _ctData.images->at(i) = sinogram;
-            _ctData.ctImages->at(i) = contourImage;
+            _ctData.images->at(i) = backprojection;
+            _ctData.ctImages->at(i) = data;
             _ctData.sinograms->at(i) = sinogram;
 
             //cv::medianBlur(*data8, *contourImage, 5);

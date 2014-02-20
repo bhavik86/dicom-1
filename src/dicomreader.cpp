@@ -217,9 +217,9 @@ void DicomReader::showImageWithNumber(const int & imageNumber) {
     cv::imshow(WINDOW_BACKPROJECT_IMAGE, *(_images[imageNumber]));
 
     // 32FC1 -> 16UC1, for user's eyes, delete in final version
-    cv::Mat data16(_sinograms[imageNumber]->cols, _sinograms[imageNumber]->rows, CV_16UC1);
-    _sinograms[imageNumber]->convertTo(data16, CV_16UC1, 1/256.0);
+    //cv::Mat data16(_sinograms[imageNumber]->cols, _sinograms[imageNumber]->rows, CV_16UC1);
+    //_sinograms[imageNumber]->convertTo(data16, CV_16UC1, 1/256.0);
 
-    cv::imshow(WINDOW_RADON_2D, data16);
+    cv::imshow(WINDOW_RADON_2D, *(_sinograms[imageNumber]));
     cv::waitKey(1);
 }
