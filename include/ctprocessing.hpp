@@ -6,13 +6,19 @@
 #include "opencv2/ocl/ocl.hpp"
 
 #define RADON_DEGREE_RANGE 180
+#define PI_TIMES_2 (2 * CV_PI)
+#define toRad(x) ((x) * CV_PI / 180.0)
 
-float gradInRads = CV_PI / 180.0;
+typedef struct _Images {
+    std::vector<cv::Mat*>ctImages;
+    std::vector<cv::Mat*>images;
+    std::vector<cv::Mat*>sinograms;
+    std::vector<cv::Mat*>fourier1d;
+}Images;
 
 typedef struct _CtData {
-    std::vector<cv::/*ocl::ocl*/Mat*> * ctImages;
-    std::vector<cv::Mat*> * images;
-    std::vector<cv::Mat*> * sinograms;
+    Images * images;
+
     int bytesAllocated;
     int width;
     int height;
@@ -39,17 +45,15 @@ private:
     static inline cv::Mat radon(const cv::Mat & ctImage, const std::vector<cv::Mat> & rotationMatrix,
                                 const int & theta,
                                 const int & width, const int & height,
-                                const int & widthPad, const int & heightPad) {
+                                const int & wPad, const int & hPad) {
 
-        int wPad = width + widthPad;
-        int hPad = height + heightPad;
 
         cv::Mat imgPad(cv::Mat::zeros(hPad, wPad, CV_16UC1));
         cv::Mat imgPadRotated(cv::Mat::zeros(hPad, wPad, CV_16UC1));
 
         cv::Mat sinogram(cv::Mat::zeros(hPad, 0, CV_32FC1));
 
-        ctImage.copyTo(imgPad(cv::Rect(ceil(widthPad / 2.0), ceil(heightPad / 2.0), width, height)));
+        ctImage.copyTo(imgPad(cv::Rect(ceil((wPad - width) / 2.0), ceil((hPad - height) / 2.0), width, height)));
 
   //      imgPad.convertTo(imgPad8, CV_8UC1, 1/256.0);
 
@@ -61,7 +65,7 @@ private:
         cv::ocl::oclMat imgPadRotatedOcl(imgPadRotated);
 
 */
-        for (int angle = 0; angle != theta; angle ++) {
+        for (int angle = 0; angle != theta; ++ angle) {
             cv::warpAffine(imgPad, imgPadRotated, rotationMatrix[angle],
                            size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP, cv::BORDER_TRANSPARENT);
 /*
@@ -75,10 +79,43 @@ private:
         }
 
         cv::Mat sinogram16(wPad, hPad, CV_16UC1);
-        sinogram.convertTo(sinogram16, CV_16UC1, 1/256.0);
+        sinogram.convertTo(sinogram16, CV_16UC1, 1 / 256.0);
 
         return sinogram16;
     }
+
+    static inline cv::Mat Fourier1D(const cv::Mat & sinogram, const std::vector<float> & dhtCoeffs) {
+        cv::Mat fourier1d(cv::Mat::zeros(sinogram.rows, sinogram.cols, CV_32FC1));
+
+        int angle;
+        int pos;
+        float piN = PI_TIMES_2 / sinogram.cols;
+        double elem;
+
+        for (int row = 0; row != sinogram.rows; ++ row) {
+
+            for (int col = 0; col != sinogram.cols; ++ col) {
+                angle = 0;
+                elem = 0;
+
+                pos = (col + sinogram.cols - sinogram.cols / 2) % sinogram.cols;
+
+                for (int i = 0; i != sinogram.cols; i ++) {
+                    elem += (sinogram.at<T>(row, i) * dhtCoeffs[i]);
+                    angle += (piN * col);
+                }
+
+                fourier1d.at<float>(row, pos) = ((pos % 2) ? (-1) : 1) * elem / sinogram.cols;
+            }
+        }
+
+        return fourier1d;
+    }
+
+    static inline cv::Mat Fourier1Dto2D(const cv::Mat & fourier1d) {
+
+    }
+
 
     static inline cv::Mat backproject(const cv::Mat & sinogram, const std::vector<float> & cosTable, const std::vector<float> & sinTable) {
         int paralProj = sinogram.cols;
@@ -93,15 +130,13 @@ private:
         int yMin = xMin;
         int xMax = std::ceil(paralProj / 2.0 - 1);
         int yMax = xMax;
-        int angleC = 0;
 
-        for (int angle = 0; angle != theta; angle ++) {
-            angleC += gradInRads;
-            for (int x = xMin; x != xMax; x ++) {
-                for (int y = yMin; y != yMax; y ++) {
-                    rotX = std::round(midIndex + x * sinTable[angleC] * x + y * cosTable[angleC]);
+        for (int angle = 0; angle != theta; ++ angle) {
+            for (int y = yMin; y != yMax; ++ y) {
+                for (int x = xMin; x != xMax; ++ x) {
+                    rotX = std::round(midIndex + x * sinTable[angle] + y * cosTable[angle]);
                     if (rotX >= 0 && rotX < paralProj) {
-                        backproj.at<T>(x - xMin, y - yMin) += (sinogram.at<T>(rotX, angle) / paralProj);
+                        backproj.at<T>(y - yMin, x - xMin) += (sinogram.at<T>(angle, rotX) / paralProj);
                     }
                 }
             }
@@ -126,31 +161,40 @@ public:
         int widthPad = std::ceil((pad - width) / 2.0);
         int heightPad = std::ceil((pad - height) / 2.0);
 
+        int wPad = width + widthPad;
+        int hPad = height + heightPad;
+
         std::vector<cv::Mat>rotationMatrix;
 
         std::vector<float>cosTable;
         std::vector<float>sinTable;
 
-        for (int i = 0; i < RADON_DEGREE_RANGE; i ++) {
-            cosTable.push_back(std::cos(i));
-            sinTable.push_back(std::sin(i));
-        }
-
         for (int angle = 0; angle < RADON_DEGREE_RANGE; angle ++) {
             rotationMatrix.push_back(cv::getRotationMatrix2D(cv::Point2i((width + widthPad) / 2, (height + heightPad) / 2),
                                                              angle, 1.0));
+            cosTable.push_back(std::cos(toRad(angle)));
+            sinTable.push_back(std::sin(toRad(angle)));
+
         }
 
-        for (register int i = r.start; i < r.end; i ++) {
+        std::vector<float>dhtCoeffs;
+
+        float twoPiN = PI_TIMES_2 / wPad;
+
+        for (int i = 0; i != wPad; i ++) {
+            dhtCoeffs.push_back(std::cos(twoPiN * i) + std::sin(twoPiN * i));
+        }
+
+        for (register int i = r.start; i != r.end; ++ i) {
 
             cv::Mat * data = new cv::Mat(_ctData.width, _ctData.height, _ctData.type);
             T pixel;
 
             char * bufferImageI = _ctData.buffer + _ctData.offset * i;
 
-            for (int x = 0; x < _ctData.width; x ++) {
-                for (int y = 0; y < _ctData.height; y ++) {
-                    pixel ^= pixel;
+            for (int y = 0; y < _ctData.height; y ++) {
+                for (int x = 0; x < _ctData.width; x ++) {
+                    pixel = 0;
 
                     if (_ctData.isLittleEndian) {
                         for (int k = 0; k < _ctData.bytesAllocated; k ++) {
@@ -182,10 +226,10 @@ public:
 
                     //MONOCHROME2 - high value -> brighter, -1 high -> blacker
                     if (_ctData.inverseNeeded) {
-                        data->at<T>(x, y) = ~pixel;
+                        data->at<T>(y, x) = ~pixel;
                     }
                     else {
-                        data->at<T>(x, y) = pixel;
+                        data->at<T>(y, x) = pixel;
                     }
                 }
             }
@@ -197,19 +241,26 @@ public:
             //cv::dilate(*data, *data, cv::Mat(3, 3, CV_8UC1));
             //cv::Scharr(*data, *data, -1, 1, 0);
 
-            _ctData.images->at(i) = data;
+            _ctData.images->images.at(i) = data;
 
             //cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data8);
 
             //---radon---//
 
-            cv::Mat * sinogram = new cv::Mat(radon(*data, rotationMatrix, RADON_DEGREE_RANGE, width, height, widthPad, heightPad));
+            cv::Mat * sinogram = new cv::Mat(radon(*data, rotationMatrix, RADON_DEGREE_RANGE, width, height, wPad, hPad));
 
-            cv::Mat * backprojection = new cv::Mat(backproject(*sinogram, cosTable, sinTable));
+            //std::cout << "sinogram completed" << std::endl;
 
-            _ctData.images->at(i) = backprojection;
-            _ctData.ctImages->at(i) = data;
-            _ctData.sinograms->at(i) = sinogram;
+            cv::Mat * fourier1d = new cv::Mat(Fourier1D(*sinogram, dhtCoeffs));
+
+            //cv::Mat * backprojection = new cv::Mat(backproject(*sinogram, cosTable, sinTable));
+
+            //std::cout << "backproj" << std::endl;
+
+            //_ctData.images->at(i) = backprojection;
+            _ctData.images->ctImages.at(i) = data;
+            _ctData.images->fourier1d.at(i) = fourier1d;
+            _ctData.images->sinograms.at(i) = sinogram;
 
             //cv::medianBlur(*data8, *contourImage, 5);
             //cv::Canny(*contourImage, *contourImage, CANNY_LOWER, 3 * CANNY_LOWER, 3);

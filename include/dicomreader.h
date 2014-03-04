@@ -26,11 +26,7 @@ public:
 
   ~DicomReader();
 
-  int readImage(gdcm::File &dFile,
-                  const gdcm::Image & dImage,
-                  std::vector<cv::/*ocl::ocl*/Mat*> & ctImages,
-                  std::vector<cv::Mat *> &images,
-                  std::vector<cv::Mat*> & sinograms);
+  int readImage(gdcm::File & dFile, const gdcm::Image & dImage, Images & images);
 
   QImage dQImage();
   cv::Mat dCImage();
@@ -38,15 +34,13 @@ public:
   void decImageNumber();
   void incImageNumber();
 
-  void reset(std::vector<cv::Mat*> & ctImages,
-             std::vector<cv::Mat*> & images,
-             std::vector<cv::Mat*> & sinograms);
+  void reset(Images & images, const int & newSize = 0);
+  void resetV(std::vector<cv::Mat*> & vec, const int & newSize = 0);
 
 private:
   int _imageNumber;
-  std::vector<cv::/*ocl::ocl*/Mat*>_ctImages;
-  std::vector<cv::Mat*>_images;
-  std::vector<cv::Mat*>_sinograms;
+
+  Images _images;
 
   cv::ocl::Context * _context;
 

@@ -19,7 +19,8 @@ typedef uint32_t u_int32_t;
 
 #define WINDOW_BACKPROJECT_IMAGE "backprojet"
 #define WINDOW_INPUT_IMAGE "input"
-#define WINDOW_RADON_2D "sinogram2d"
+#define WINDOW_RADON "sinogram"
+#define WINDOW_DHT "fourier1d"
 
 DicomReader::DicomReader(QObject * parent) :
     QObject(parent),
@@ -73,25 +74,24 @@ DicomReader::DicomReader(const QString & dicomFile, QObject * parent) :
 }
 
 DicomReader::~DicomReader() {
-    reset(_ctImages, _images, _sinograms);
+    reset(_images);
 }
 
-void DicomReader::reset(std::vector<cv::Mat*> & ctImages,
-                        std::vector<cv::Mat*> & images,
-                        std::vector<cv::Mat*> & sinograms) {
-    qDeleteAll(ctImages.begin(), ctImages.end());
-    ctImages.clear();
-    qDeleteAll(images.begin(), images.end());
-    images.clear();
-    qDeleteAll(sinograms.begin(), sinograms.end());
-    sinograms.clear();
+void DicomReader::resetV(std::vector<cv::Mat*> & vec, const int & newSize) {
+    qDeleteAll(vec.begin(), vec.end());
+    vec.clear();
+    vec.resize(newSize);
 }
 
-int DicomReader::readImage(gdcm::File & dFile, const gdcm::Image & dImage, std::vector<cv::Mat*> & ctImages,
-                             std::vector<cv::Mat*> & images, std::vector<cv::Mat*> & sinograms) {
+void DicomReader::reset(Images & images, const int & newSize) {
 
-    //clear previous "garbage"
-    reset(ctImages, images, sinograms);
+    resetV(images.ctImages, newSize);
+    resetV(images.images, newSize);
+    resetV(images.sinograms, newSize);
+    resetV(images.fourier1d, newSize);
+}
+
+int DicomReader::readImage(gdcm::File & dFile, const gdcm::Image & dImage, Images & images) {
 
     std::vector<char>vbuffer;
     vbuffer.resize(dImage.GetBufferLength());
@@ -123,13 +123,11 @@ int DicomReader::readImage(gdcm::File & dFile, const gdcm::Image & dImage, std::
     int imagesCount = dImage.GetDimension(2);
 
     dImage.GetBuffer(buffer);
-    ctImages.resize(imagesCount);
-    images.resize(imagesCount);
-    sinograms.resize(imagesCount);
 
-    ctData.ctImages = &ctImages;
+    //clear previous "garbage"
+    reset(images, imagesCount);
+
     ctData.images = &images;
-    ctData.sinograms = &sinograms;
     //MONOCHROME2
 
     gdcm::PhotometricInterpretation photometricInterpretation = dImage.GetPhotometricInterpretation();
@@ -174,11 +172,10 @@ int DicomReader::readImage(gdcm::File & dFile, const gdcm::Image & dImage, std::
 
     std::cout << "loading done" << std::endl;
 
-    cv::imwrite("ct.png", *(_ctImages[0]));
-
     cv::namedWindow(WINDOW_BACKPROJECT_IMAGE, cv::WINDOW_AUTOSIZE);//| cv::WINDOW_OPENGL);
     cv::namedWindow(WINDOW_INPUT_IMAGE, cv::WINDOW_AUTOSIZE);// | cv::WINDOW_OPENGL);
-    cv::namedWindow(WINDOW_RADON_2D, cv::WINDOW_AUTOSIZE);
+    cv::namedWindow(WINDOW_RADON, cv::WINDOW_AUTOSIZE);
+    cv::namedWindow(WINDOW_DHT, cv::WINDOW_AUTOSIZE);
 
     showImageWithNumber(0);
 
@@ -197,29 +194,27 @@ int DicomReader::readFile(const QString & dicomFile) {
     gdcm::File & dFile = dIReader.GetFile();
     gdcm::Image & dImage = dIReader.GetImage();
 
-    readImage(dFile, dImage, _ctImages, _images, _sinograms);
+    readImage(dFile, dImage, _images);
 
     return DICOM_ALL_OK;
 }
 
 void DicomReader::decImageNumber() {
-    _imageNumber = ((_imageNumber) ? _imageNumber : _ctImages.size()) - 1;
+    _imageNumber = ((_imageNumber) ? _imageNumber : _images.ctImages.size()) - 1;
     showImageWithNumber(_imageNumber);
 }
 
 void DicomReader::incImageNumber() {
-    ++_imageNumber %= _ctImages.size();
+    ++_imageNumber %= _images.ctImages.size();
     showImageWithNumber(_imageNumber);
 }
 
 void DicomReader::showImageWithNumber(const int & imageNumber) {
-    cv::imshow(WINDOW_INPUT_IMAGE, *(_ctImages[imageNumber]));
-    cv::imshow(WINDOW_BACKPROJECT_IMAGE, *(_images[imageNumber]));
+    cv::imshow(WINDOW_INPUT_IMAGE, *(_images.ctImages[imageNumber]));
+    cv::imshow(WINDOW_BACKPROJECT_IMAGE, *(_images.images[imageNumber]));
 
-    // 32FC1 -> 16UC1, for user's eyes, delete in final version
-    //cv::Mat data16(_sinograms[imageNumber]->cols, _sinograms[imageNumber]->rows, CV_16UC1);
-    //_sinograms[imageNumber]->convertTo(data16, CV_16UC1, 1/256.0);
+    cv::imshow(WINDOW_RADON, *(_images.sinograms[imageNumber]));
+    cv::imshow(WINDOW_DHT, *(_images.fourier1d[imageNumber]));
 
-    cv::imshow(WINDOW_RADON_2D, *(_sinograms[imageNumber]));
     cv::waitKey(1);
 }
