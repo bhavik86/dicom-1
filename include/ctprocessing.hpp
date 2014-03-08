@@ -5,6 +5,8 @@
 #include "opencv2/core/core.hpp"
 #include "opencv2/ocl/ocl.hpp"
 
+#include <cmath>
+
 #define RADON_DEGREE_RANGE 180
 #define PI_TIMES_2 (2 * CV_PI)
 #define toRad(x) ((x) * CV_PI / 180.0)
@@ -147,7 +149,7 @@ private:
         for (int angle = 0; angle != theta; ++ angle) {
             for (int y = yMin; y != yMax; ++ y) {
                 for (int x = xMin; x != xMax; ++ x) {
-                    rotX = std::round(midIndex - y * sinTable[angle] - x * cosTable[angle]);
+                    rotX = (int)(midIndex - y * sinTable[angle] - x * cosTable[angle]);
                     if (rotX >= 0 && rotX < paralProj) {
                         backproj.at<T>(y - yMin, x - xMin) += (sinogram.at<T>(angle, rotX) / paralProj);
                     }

@@ -32,16 +32,34 @@ unix {
             -ltbb_debug
 }
 
-win32 {
-    INCLUDEPATH += C:\opencv\build\include\
-    LIBS += -L C:\opencv\build\x64\mingw\lib -libopencv_core245 \
-                                         -libopencv_highgui245 \
-                                         -libopencv_imgproc245 \
-                                         -libopencv_video245 \
-                                         -libopencv_objdetect245
+contains(QMAKE_HOST.arch, x86):{
+QMAKE_LFLAGS *= /MACHINE:X86
 }
 
-QMAKE_CXXFLAGS += -std=c++0x
+contains(QMAKE_HOST.arch, x86_64):{
+QMAKE_LFLAGS *= /MACHINE:X64
+    INCLUDEPATH += C:\opencv\build\include\ \
+                   "C:\Program Files (x86)\GDCM 2.4\include\gdcm-2.4"
+    LIBS += -L"C:\opencv\build\x64\vc11\lib"
+    LIBS += -L"C:\Users\nlog1_000\Downloads\gdcm\bin\Debug"
+    LIBS += -lopencv_core248 \
+            -lopencv_highgui248 \
+            -lopencv_imgproc248 \
+            -lopencv_video248 \
+            -lopencv_objdetect248
+    LIBS += -lgdcmcharls \
+            -lgdcmjpeg12 \
+            -lgdcmCommon \
+            -lgdcmjpeg16 \
+            -lgdcmDICT \
+            -lgdcmjpeg8 \
+            -lgdcmDSED \
+            -lgdcmMSFF \
+            -lgdcmIOD\
+            -lgdcmopenjpeg\
+}
+
+QMAKE_CXXFLAGS_CXX11 = -std=c++11
 
 SOURCES += src/main.cpp\
         src/mainwindow.cpp\

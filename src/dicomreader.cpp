@@ -68,8 +68,8 @@ int DicomReader::initOpenCL() {
     }
 }
 
-DicomReader::DicomReader(const QString & dicomFile, QObject * parent) :
-    DicomReader(parent) {
+DicomReader::DicomReader(const QString & dicomFile, QObject * parent) {
+    DicomReader::DicomReader(parent);
     readFile(dicomFile);
 }
 
