@@ -38,7 +38,7 @@ public:
   void resetV(std::vector<cv::Mat*> & vec, const int & newSize = 0);
 
 private:
-  int _imageNumber;
+  size_t _imageNumber;
 
   Images _images;
 
@@ -46,7 +46,7 @@ private:
 
   int initOpenCL();
 
-  void showImageWithNumber(const int & imageNumber);
+  void showImageWithNumber(const size_t & imageNumber);
 
 signals:
 

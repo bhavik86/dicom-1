@@ -60,12 +60,8 @@ int DicomReader::initOpenCL() {
                 }
             }
         }
-
-        return OPENCL_NOT_INITIALIZED;
     }
-    else {
-        return OPENCL_NOT_INITIALIZED;
-    }
+    return OPENCL_NOT_INITIALIZED;
 }
 
 DicomReader::DicomReader(const QString & dicomFile, QObject * parent) {
@@ -209,7 +205,7 @@ void DicomReader::incImageNumber() {
     showImageWithNumber(_imageNumber);
 }
 
-void DicomReader::showImageWithNumber(const int & imageNumber) {
+void DicomReader::showImageWithNumber(const size_t &imageNumber) {
     cv::imshow(WINDOW_INPUT_IMAGE, *(_images.ctImages[imageNumber]));
     cv::imshow(WINDOW_BACKPROJECT_IMAGE, *(_images.images[imageNumber]));
 

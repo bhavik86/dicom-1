@@ -1,5 +1,5 @@
-#ifndef CTPROCESSING_H
-#define CTPROCESSING_H
+#ifndef CTPROCESSING_HPP
+#define CTPROCESSING_HPP
 
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/core/core.hpp"
@@ -301,4 +301,4 @@ public:
     }
 };
 
-#endif // CTPROCESSING_H
+#endif // CTPROCESSING_HPP

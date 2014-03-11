@@ -11,62 +11,57 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 TARGET = dicom
 TEMPLATE = app
 
+CONFIG += c++11
+
 INCLUDEPATH += include
 
 unix {
     INCLUDEPATH += /usr/include/gdcm-2.4
 
-    CONFIG += link_pkgconfig warn_on
+    CONFIG += link_pkgconfig
     PKGCONFIG += opencv
-
-    LIBS += -lgdcmcharls \
-            -lgdcmjpeg12 \
-            -lgdcmCommon \
-            -lgdcmjpeg16 \
-            -lgdcmDICT \
-            -lgdcmjpeg8 \
-            -lgdcmDSED \
-            -lgdcmMSFF \
-            -lgdcmIOD\
-            -lgdcmopenjpeg\
-            -ltbb_debug
 }
 
-contains(QMAKE_HOST.arch, x86):{
-QMAKE_LFLAGS *= /MACHINE:X86
-}
+win32 {
+    INCLUDEPATH += C:\opencv\build\include \
+                   C:\GDCM\gdcm\include
 
-contains(QMAKE_HOST.arch, x86_64):{
-QMAKE_LFLAGS *= /MACHINE:X64
-    INCLUDEPATH += C:\opencv\build\include\ \
-                   "C:\Program Files (x86)\GDCM 2.4\include\gdcm-2.4"
-    LIBS += -L"C:\opencv\build\x64\vc11\lib"
-    LIBS += -L"C:\Users\nlog1_000\Downloads\gdcm\bin\Debug"
+    !contains(QMAKE_HOST.arch, x86_64) {
+            QMAKE_LFLAGS *= /MACHINE:X86
+            LIBS += -L"C:\opencv\build\x86\vc12\lib"
+    }
+    else {
+        contains(QMAKE_HOST.arch, x86_64):{
+            QMAKE_LFLAGS *= /MACHINE:X64
+            LIBS += -L"C:\opencv\build\x64\vc12\lib"
+        }
+    }
+
+    LIBS += -L"C:\GDCM\gdcm\bin\Debug"
+
     LIBS += -lopencv_core248 \
             -lopencv_highgui248 \
             -lopencv_imgproc248 \
-            -lopencv_video248 \
-            -lopencv_objdetect248
-    LIBS += -lgdcmcharls \
-            -lgdcmjpeg12 \
-            -lgdcmCommon \
-            -lgdcmjpeg16 \
-            -lgdcmDICT \
-            -lgdcmjpeg8 \
-            -lgdcmDSED \
-            -lgdcmMSFF \
-            -lgdcmIOD\
-            -lgdcmopenjpeg\
+            -lopencv_ocl248
 }
 
-QMAKE_CXXFLAGS_CXX11 = -std=c++11
+LIBS += -lgdcmcharls \
+        -lgdcmjpeg12 \
+        -lgdcmCommon \
+        -lgdcmjpeg16 \
+        -lgdcmDICT \
+        -lgdcmjpeg8 \
+        -lgdcmDSED \
+        -lgdcmMSFF \
+        -lgdcmIOD\
+        -lgdcmopenjpeg
 
 SOURCES += src/main.cpp\
-        src/mainwindow.cpp\
-        src/dicomreader.cpp\
-        src/normal.cpp\
-        src/GaussDeriv.cpp\
-        src/StegerLines.cpp
+           src/mainwindow.cpp\
+           src/dicomreader.cpp\
+           src/normal.cpp\
+           src/GaussDeriv.cpp\
+           src/StegerLines.cpp
 
 HEADERS  += include/mainwindow.h\
             include/dicomreader.h\
