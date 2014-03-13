@@ -11,6 +11,122 @@
 #define PI_TIMES_2 (2 * CV_PI)
 #define toRad(x) ((x) * CV_PI / 180.0)
 
+static inline cv::Mat radon(const cv::Mat & ctImage, const std::vector<cv::Mat> & rotationMatrix,
+                            const int & theta,
+                            const int & width, const int & height,
+                            const int & wPad, const int & hPad) {
+
+
+    cv::Mat imgPad(cv::Mat::zeros(hPad, wPad, CV_16UC1));
+    cv::Mat imgPadRotated(cv::Mat::zeros(hPad, wPad, CV_16UC1));
+
+    cv::Mat sinogram(cv::Mat::zeros(theta, wPad, CV_32FC1));
+
+    ctImage.copyTo(imgPad(cv::Rect(ceil((wPad - width) / 2.0), ceil((hPad - height) / 2.0), width, height)));
+
+//      imgPad.convertTo(imgPad8, CV_8UC1, 1/256.0);
+
+    cv::Size size(imgPad.rows, imgPad.cols);
+/*
+    cv::ocl::oclMat imgPadOcl(imgPad8);
+    cv::ocl::oclMat imgPadRotatedOcl(imgPadRotated);
+
+*/
+    cv::Mat sinogramCol;
+
+    for (int angle = 0; angle != theta; ++ angle) {
+        cv::warpAffine(imgPad, imgPadRotated, rotationMatrix[angle],
+                       size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP, cv::BORDER_TRANSPARENT);
+/*
+        cv::ocl::warpAffine(imgPadOcl, imgPadRotatedOcl, rotationMatrix, size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP);
+        imgPadRotatedOcl.download(imgPadRotated);
+        */
+
+        sinogramCol = sinogram(cv::Rect(0, angle, wPad, 1));
+        cv::reduce(imgPadRotated, sinogramCol, 0, CV_REDUCE_SUM, CV_32FC1);
+
+    }
+
+    cv::Mat sinogram16(wPad, hPad, CV_16UC1);
+    sinogram.convertTo(sinogram16, CV_16UC1, 1 / 256.0);
+
+    return sinogram16;
+}
+
+static inline cv::Mat Fourier1D(const cv::Mat & sinogram, const std::vector<float> & dhtCoeffs) {
+    cv::Mat fourier1d(cv::Mat::zeros(sinogram.rows, sinogram.cols, CV_32FC1));
+
+    int pos;
+    double elem;
+
+    for (int angle = 0; angle != sinogram.rows; ++ angle) {
+
+        for (int col = 0; col != sinogram.cols; ++ col) {
+            elem = 0;
+            pos = (col + sinogram.cols - sinogram.cols / 2) % sinogram.cols;
+
+            for (int i = 0; i != sinogram.cols; i ++) {
+                elem += (sinogram.at<u_int16_t>(angle, i) * dhtCoeffs[i]);
+            }
+
+            fourier1d.at<float>(angle, pos) = ((pos % 2) ? (-1) : 1) * elem / sinogram.cols;
+        }
+    }
+
+    return fourier1d;
+}
+
+static inline cv::Mat Fourier1Dto2D(const cv::Mat & fourier1d, const std::vector<float> & sinTable, const std::vector<float> & cosTable) {
+    cv::Mat fourier2d(cv::Mat::zeros(fourier1d.rows, fourier1d.cols, CV_32FC1));
+
+    int orgx = fourier1d.rows / 2;
+    int orgy = orgx;
+    int radius;
+    int x;
+    int y;
+
+    for (int angle = 0; angle != fourier1d.rows; ++ angle) {
+        for (int col = 0; col != fourier1d.cols; ++ col) {
+            radius = col - fourier1d.rows / 2;
+
+            x = (int) (orgx + radius * cosTable[angle]);
+            y = (int) (orgy - radius * sinTable[angle]);
+
+            fourier2d.at<float>(y, x) = fourier1d.at<float>(angle, col);
+        }
+    }
+
+    return fourier2d;
+}
+
+static inline cv::Mat backproject(const cv::Mat & sinogram, const std::vector<float> & cosTable, const std::vector<float> & sinTable) {
+    int paralProj = sinogram.cols;
+    int theta = sinogram.rows;
+
+    cv::Mat backproj(cv::Mat::zeros(paralProj, paralProj, CV_16UC1));
+
+    int midIndex = std::floor(paralProj / 2.0) + 1;
+
+    int rotX;
+    int xMin = - std::ceil(paralProj / 2.0);
+    int yMin = xMin;
+    int xMax = std::ceil(paralProj / 2.0 - 1);
+    int yMax = xMax;
+
+    for (int angle = 0; angle != theta; ++ angle) {
+        for (int y = yMin; y != yMax; ++ y) {
+            for (int x = xMin; x != xMax; ++ x) {
+                rotX = (int)(midIndex - y * sinTable[angle] - x * cosTable[angle]);
+                if (rotX >= 0 && rotX < paralProj) {
+                    backproj.at<float>(y - yMin, x - xMin) += (sinogram.at<float>(angle, rotX) / paralProj);
+                }
+            }
+        }
+    }
+
+    return backproj;
+}
+
 typedef struct _Images {
     std::vector<cv::Mat*>ctImages;
     std::vector<cv::Mat*>images;
@@ -44,121 +160,6 @@ class CtProcessing : public cv::ParallelLoopBody {
 private:
     CtData _ctData;
 
-    static inline cv::Mat radon(const cv::Mat & ctImage, const std::vector<cv::Mat> & rotationMatrix,
-                                const int & theta,
-                                const int & width, const int & height,
-                                const int & wPad, const int & hPad) {
-
-
-        cv::Mat imgPad(cv::Mat::zeros(hPad, wPad, CV_16UC1));
-        cv::Mat imgPadRotated(cv::Mat::zeros(hPad, wPad, CV_16UC1));
-
-        cv::Mat sinogram(cv::Mat::zeros(hPad, 0, CV_32FC1));
-
-        ctImage.copyTo(imgPad(cv::Rect(ceil((wPad - width) / 2.0), ceil((hPad - height) / 2.0), width, height)));
-
-  //      imgPad.convertTo(imgPad8, CV_8UC1, 1/256.0);
-
-        cv::Mat colSum(cv::Mat::zeros(imgPad.cols, 1, CV_32FC1));
-
-        cv::Size size(imgPad.rows, imgPad.cols);
-/*
-        cv::ocl::oclMat imgPadOcl(imgPad8);
-        cv::ocl::oclMat imgPadRotatedOcl(imgPadRotated);
-
-*/
-        for (int angle = 0; angle != theta; ++ angle) {
-            cv::warpAffine(imgPad, imgPadRotated, rotationMatrix[angle],
-                           size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP, cv::BORDER_TRANSPARENT);
-/*
-            cv::ocl::warpAffine(imgPadOcl, imgPadRotatedOcl, rotationMatrix, size, cv::INTER_LINEAR | cv::WARP_INVERSE_MAP);
-            imgPadRotatedOcl.download(imgPadRotated);
-            */
-
-            cv::reduce(imgPadRotated, colSum, 0, CV_REDUCE_SUM, CV_32FC1);
-            sinogram.push_back(colSum);
-
-        }
-
-        cv::Mat sinogram16(wPad, hPad, CV_16UC1);
-        sinogram.convertTo(sinogram16, CV_16UC1, 1 / 256.0);
-
-        return sinogram16;
-    }
-
-    static inline cv::Mat Fourier1D(const cv::Mat & sinogram, const std::vector<float> & dhtCoeffs) {
-        cv::Mat fourier1d(cv::Mat::zeros(sinogram.rows, sinogram.cols, CV_32FC1));
-
-        int pos;
-        double elem;
-
-        for (int angle = 0; angle != sinogram.rows; ++ angle) {
-
-            for (int col = 0; col != sinogram.cols; ++ col) {
-                elem = 0;
-                pos = (col + sinogram.cols - sinogram.cols / 2) % sinogram.cols;
-
-                for (int i = 0; i != sinogram.cols; i ++) {
-                    elem += (sinogram.at<T>(angle, i) * dhtCoeffs[i]);
-                }
-
-                fourier1d.at<float>(angle, pos) = ((pos % 2) ? (-1) : 1) * elem / sinogram.cols;
-            }
-        }
-
-        return fourier1d;
-    }
-
-    static inline cv::Mat Fourier1Dto2D(const cv::Mat & fourier1d, const std::vector<float> & sinTable, const std::vector<float> & cosTable) {
-        cv::Mat fourier2d(cv::Mat::zeros(fourier1d.rows, fourier1d.cols, CV_32FC1));
-
-        int orgx = fourier1d.rows / 2;
-        int orgy = orgx;
-        int radius;
-        int x;
-        int y;
-
-        for (int angle = 0; angle != fourier1d.rows; ++ angle) {
-            for (int col = 0; col != fourier1d.cols; ++ col) {
-                radius = col - fourier1d.rows / 2;
-
-                x = (int) (orgx + radius * cosTable[angle]);
-                y = (int) (orgy - radius * sinTable[angle]);
-
-                fourier2d.at<float>(y, x) = fourier1d.at<float>(angle, col);
-            }
-        }
-
-        return fourier2d;
-    }
-
-    static inline cv::Mat backproject(const cv::Mat & sinogram, const std::vector<float> & cosTable, const std::vector<float> & sinTable) {
-        int paralProj = sinogram.cols;
-        int theta = sinogram.rows;
-
-        cv::Mat backproj(cv::Mat::zeros(paralProj, paralProj, CV_16UC1));
-
-        int midIndex = std::floor(paralProj / 2.0) + 1;
-
-        int rotX;
-        int xMin = - std::ceil(paralProj / 2.0);
-        int yMin = xMin;
-        int xMax = std::ceil(paralProj / 2.0 - 1);
-        int yMax = xMax;
-
-        for (int angle = 0; angle != theta; ++ angle) {
-            for (int y = yMin; y != yMax; ++ y) {
-                for (int x = xMin; x != xMax; ++ x) {
-                    rotX = (int)(midIndex - y * sinTable[angle] - x * cosTable[angle]);
-                    if (rotX >= 0 && rotX < paralProj) {
-                        backproj.at<T>(y - yMin, x - xMin) += (sinogram.at<T>(angle, rotX) / paralProj);
-                    }
-                }
-            }
-        }
-
-        return backproj;
-    }
 
 public:
     CtProcessing(CtData & ctData) : _ctData(ctData) {
@@ -262,14 +263,14 @@ public:
 
             cv::Mat * sinogram = new cv::Mat(radon(*data, rotationMatrix, RADON_DEGREE_RANGE, width, height, wPad, hPad));
 
-            //cv::Mat * fourier1d = new cv::Mat(Fourier1D(*sinogram, dhtCoeffs));
+            cv::Mat * fourier1d = new cv::Mat(Fourier1D(*sinogram, dhtCoeffs));
 
-            cv::Mat * backprojection = new cv::Mat(backproject(*sinogram, cosTable, sinTable));
+            //cv::Mat * backprojection = new cv::Mat(backproject(*sinogram, cosTable, sinTable));
 
             _ctData.images->ctImages.at(i) = data;
-            _ctData.images->fourier1d.at(i) = data;//fourier1d;
+            _ctData.images->fourier1d.at(i) = fourier1d;
             _ctData.images->sinograms.at(i) = sinogram;
-            _ctData.images->images.at(i) = backprojection;
+            //_ctData.images->images.at(i) = backprojection;
 
             //cv::medianBlur(*data8, *contourImage, 5);
             //cv::Canny(*contourImage, *contourImage, CANNY_LOWER, 3 * CANNY_LOWER, 3);
