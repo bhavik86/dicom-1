@@ -22,7 +22,7 @@ class DicomReader : public QObject {
   Q_OBJECT
 public:
   explicit DicomReader(QObject * parent = 0);
-  explicit DicomReader(const QString & dicomFile, QObject * parent = 0);
+  explicit DicomReader(const QString & dicomFile, Images & images, QObject * parent = 0);
 
   ~DicomReader();
 
@@ -40,7 +40,7 @@ public:
 private:
   size_t _imageNumber;
 
-  Images _images;
+  Images * _images;
 
   cv::ocl::Context * _context;
 
@@ -51,7 +51,7 @@ private:
 signals:
 
 public slots:
-  int readFile(const QString & dicomFile);
+  int readFile(const QString & dicomFile, Images & images);
 };
 
 #endif // DICOMREADER_H

@@ -64,12 +64,12 @@ int DicomReader::initOpenCL() {
     return OPENCL_NOT_INITIALIZED;
 }
 
-DicomReader::DicomReader(const QString & dicomFile, QObject * parent) : DicomReader(parent) {
-    readFile(dicomFile);
+DicomReader::DicomReader(const QString & dicomFile, Images & images, QObject * parent) : DicomReader(parent) {
+    readFile(dicomFile, images);
 }
 
 DicomReader::~DicomReader() {
-    reset(_images);
+    reset(*_images);
 }
 
 void DicomReader::resetV(std::vector<cv::Mat*> & vec, const int & newSize) {
@@ -79,7 +79,6 @@ void DicomReader::resetV(std::vector<cv::Mat*> & vec, const int & newSize) {
 }
 
 void DicomReader::reset(Images & images, const int & newSize) {
-
     resetV(images.ctImages, newSize);
     resetV(images.images, newSize);
     resetV(images.sinograms, newSize);
@@ -87,7 +86,6 @@ void DicomReader::reset(Images & images, const int & newSize) {
 }
 
 int DicomReader::readImage(gdcm::File & dFile, const gdcm::Image & dImage, Images & images) {
-
     std::vector<char>vbuffer;
     vbuffer.resize(dImage.GetBufferLength());
     char * buffer = &vbuffer[0];
@@ -177,8 +175,10 @@ int DicomReader::readImage(gdcm::File & dFile, const gdcm::Image & dImage, Image
     return DICOM_ALL_OK;
 }
 
-int DicomReader::readFile(const QString & dicomFile) {
+int DicomReader::readFile(const QString & dicomFile, Images & images) {
     gdcm::ImageReader dIReader;
+
+    _images = &images;
 
     dIReader.SetFileName(dicomFile.toStdString().c_str());
 
@@ -189,27 +189,27 @@ int DicomReader::readFile(const QString & dicomFile) {
     gdcm::File & dFile = dIReader.GetFile();
     gdcm::Image & dImage = dIReader.GetImage();
 
-    readImage(dFile, dImage, _images);
+    readImage(dFile, dImage, images);
 
     return DICOM_ALL_OK;
 }
 
-void DicomReader::decImageNumber() {
-    _imageNumber = ((_imageNumber) ? _imageNumber : _images.ctImages.size()) - 1;
+void DicomReader::decImageNumber() {    
+    _imageNumber = ((_imageNumber) ? _imageNumber : (*_images).ctImages.size()) - 1;
     showImageWithNumber(_imageNumber);
 }
 
 void DicomReader::incImageNumber() {
-    ++_imageNumber %= _images.ctImages.size();
+    ++_imageNumber %= (*_images).ctImages.size();
     showImageWithNumber(_imageNumber);
 }
 
 void DicomReader::showImageWithNumber(const size_t &imageNumber) {
-    cv::imshow(WINDOW_INPUT_IMAGE, *(_images.ctImages[imageNumber]));
-    cv::imshow(WINDOW_BACKPROJECT_IMAGE, *(_images.images[imageNumber]));
+    cv::imshow(WINDOW_INPUT_IMAGE, *((*_images).ctImages[imageNumber]));
+    cv::imshow(WINDOW_BACKPROJECT_IMAGE, *((*_images).images[imageNumber]));
 
-    cv::imshow(WINDOW_RADON, *(_images.sinograms[imageNumber]));
-    cv::imshow(WINDOW_DHT, *(_images.fourier1d[imageNumber]));
+    cv::imshow(WINDOW_RADON, *((*_images).sinograms[imageNumber]));
+    cv::imshow(WINDOW_DHT, *((*_images).fourier1d[imageNumber]));
 
     cv::waitKey(1);
 }

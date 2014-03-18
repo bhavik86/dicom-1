@@ -1,18 +1,18 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include <QMainWindow>
+#include <QtWidgets/QMainWindow>
 
-#include <QKeyEvent>
+#include <QtGui/QKeyEvent>
 
 #include "dicomreader.h"
+#include "glviewer.h"
 
 namespace Ui {
-class MainWindow;
+    class MainWindow;
 }
 
-class MainWindow : public QMainWindow
-{
+class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
@@ -24,8 +24,12 @@ private:
 
     DicomReader * _dicomReader;
 
+    GLviewer * _glviewer;
+
     void fetchConnections();
     void keyPressEvent(QKeyEvent * event);
+
+    Images _images;
 
 signals:
     void signalDicomToRead(const QString & dicomFile);
