@@ -5,5 +5,5 @@ in highp vec4 aColor;
 uniform sampler2D qt_Texture0;
 
 void main(void) {
-    gl_FragColor = aColor;//texture2D(qt_Texture0, qt_TexCoord0.st) + 1.0;
+    gl_FragColor = texture2D(qt_Texture0, qt_TexCoord0.st);
 }

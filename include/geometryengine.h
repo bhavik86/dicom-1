@@ -4,6 +4,7 @@
 #include <QtGui/QOpenGLFunctions>
 #include <QtGui/QOpenGLShaderProgram>
 #include <QtGui/QOpenGLBuffer>
+#include <QtGui/QOpenGLTexture>
 
 #include "opencv2/core/core.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
@@ -25,9 +26,10 @@ private:
     int _vertexLocation;
     int _texcoordLocation;
 
+    void initGeometry();
+
     GLuint _vboIds[2];
 
-    void initGeometry();
 };
 
 #endif // GEOMETRYENGINE_H

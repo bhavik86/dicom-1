@@ -26,6 +26,8 @@ private:
 
     GLviewer * _glviewer;
 
+    QSurfaceFormat format;
+
     void fetchConnections();
     void keyPressEvent(QKeyEvent * event);
 

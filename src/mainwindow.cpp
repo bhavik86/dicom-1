@@ -11,24 +11,12 @@
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
-    ui(new Ui::MainWindow) {
+    ui(new Ui::MainWindow),
+    _glviewer(0) {
     ui->setupUi(this);
 
     _dicomReader = new DicomReader(this);
     //_dicomReader->reset(_images);
-
-    QSurfaceFormat format;
-    format.setSamples(16);
-    format.setVersion(2, 1);
-    format.setProfile(QSurfaceFormat::CoreProfile);
-    format.setOption(QSurfaceFormat::DebugContext);
-
-    _glviewer = new GLviewer;
-
-    _glviewer->setSurfaceType(QSurface::OpenGLSurface);
-    _glviewer->setFormat(format);
-    _glviewer->resize(640, 480);
-    _glviewer->show();
 
     fetchConnections();
 }
@@ -46,7 +34,22 @@ void MainWindow::readDicom() {
     QString dicomFileName = QFileDialog::getOpenFileName(this, tr("Load DICOM file for processing"), "/home/walkindude/dicomF/");
     if (dicomFileName != "") {
         _dicomReader->readFile(dicomFileName, _images);
-        _glviewer->loadModel(_images.ctImages);
+
+        if (!_glviewer) {
+            QSurfaceFormat format;
+            format.setSamples(16);
+            format.setVersion(2, 1);
+            format.setProfile(QSurfaceFormat::CoreProfile);
+            format.setOption(QSurfaceFormat::DebugContext);
+
+            _glviewer = new GLviewer(_images.ctImages);
+
+            _glviewer->setSurfaceType(QSurface::OpenGLSurface);
+            _glviewer->setFormat(format);
+            _glviewer->resize(640, 480);
+
+            _glviewer->show();
+        }
     }
     else {
         QMessageBox::critical(this, "Error", "Empty file", QMessageBox::Ok);

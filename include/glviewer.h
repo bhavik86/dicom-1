@@ -10,14 +10,12 @@ class GLviewer : public OpenGLWindow {
     Q_OBJECT
     
 public:
-    GLviewer();
+    explicit GLviewer(const std::vector<cv::Mat *> & ctImages);
 
     ~GLviewer();
 
     void initialize();
     void render();
-
-    void loadModel(const std::vector<cv::Mat*> & ctImages);
 
 protected:
     void initTextures();
@@ -33,7 +31,8 @@ private:
 
     GeometryEngine _geometryEngine;
 
-    QOpenGLTexture * _textureCV;
+    QOpenGLTexture _textureCV;
+    GLuint _textureCVGL;
 
     std::vector<cv::Mat*> _ctImages;
 

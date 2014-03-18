@@ -16,6 +16,7 @@ GeometryEngine::GeometryEngine() :
 GeometryEngine::~GeometryEngine() {
     _vboVert.destroy();
     _vboInd.destroy();
+    _vboColor.destroy();
 }
 
 void GeometryEngine::init(QOpenGLShaderProgram * program) {
@@ -36,25 +37,26 @@ void GeometryEngine::initGeometry() {
 
     VertexData vertices[] = {
         {QVector3D(-1.0, -1.0,  1.0), QVector3D(1.0, 0.0, 0.0), QVector2D(0.0, 0.0)},  // v0
-        {QVector3D( 1.0, -1.0,  1.0), QVector3D(1.0, 0.0, 1.0), QVector2D(0.33, 0.0)}, // v1
-        {QVector3D(-1.0,  1.0,  1.0), QVector3D(1.0, 0.0, 0.0), QVector2D(0.0, 0.5)},  // v2
+        {QVector3D( 1.0, -1.0,  1.0), QVector3D(1.0, 0.0, 1.0), QVector2D(1.0, 0.0)}, // v1
+        {QVector3D(-1.0,  1.0,  1.0), QVector3D(1.0, 0.0, 0.0), QVector2D(0.0, 1.0)},  // v2
+        {QVector3D( 1.0,  1.0,  1.0), QVector3D(1.0, 0.0, 0.0), QVector2D(1.0, 1.0)},  // v3
     };
 
     _vboVert.bind();
-    _vboVert.allocate(&vertices, 3 * sizeof(VertexData));
+    _vboVert.allocate(&vertices, 4 * sizeof(VertexData));
 
     _vboColor.bind();
-    _vboColor.allocate(&vertices, 3 * sizeof(VertexData));
+    _vboColor.allocate(&vertices, 4 * sizeof(VertexData));
 
     _vboInd.create();
     _vboInd.setUsagePattern(QOpenGLBuffer::UsagePattern::StaticDraw);
 
     GLushort indices[] = {
-         0,  1,  2
+         0, 1, 2, 2, 1, 3
     };
 
     _vboInd.bind();
-    _vboInd.allocate(&indices, 3 * sizeof(GLushort));
+    _vboInd.allocate(&indices, 6 * sizeof(GLushort));
 }
 
 void GeometryEngine::drawModel(QOpenGLShaderProgram * program) {
@@ -73,8 +75,7 @@ void GeometryEngine::drawModel(QOpenGLShaderProgram * program) {
     program->enableAttributeArray(_texcoordLocation);
     program->setAttributeBuffer(_texcoordLocation, GL_FLOAT, offset, 2, sizeof(VertexData));
 
-    _vboVert.bind();
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDrawElements(GL_TRIANGLE_STRIP, 6, GL_UNSIGNED_SHORT, 0);
 
     qDebug() << program->log();
 }
