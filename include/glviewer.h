@@ -29,6 +29,8 @@ protected:
 private:
     QOpenGLShaderProgram * _program;
 
+    int _shaderMatrix;
+
     GeometryEngine _geometryEngine;
 
     QOpenGLTexture * _textureCV;

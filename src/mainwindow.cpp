@@ -19,8 +19,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     QSurfaceFormat format;
     format.setSamples(16);
-    format.setVersion(3, 3);
-    format.setProfile(QSurfaceFormat::OpenGLContextProfile::CoreProfile);
+    format.setVersion(2, 1);
+    format.setProfile(QSurfaceFormat::CoreProfile);
     format.setOption(QSurfaceFormat::DebugContext);
 
     _glviewer = new GLviewer;

@@ -1,4 +1,5 @@
 #include <QtGui/QColor>
+#include <QtGui/QScreen>
 
 #include "glviewer.h"
 
@@ -25,11 +26,13 @@ void GLviewer::initialize() {
     _program->addShaderFromSourceFile(QOpenGLShader::Fragment, ":shaders/fragment.glsl");
     _program->link();
 
-    glEnable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    glShadeModel(GL_SMOOTH);
+    _shaderMatrix = _program->uniformLocation("qt_ModelViewProjectionMatrix");
 
-    _geometryEngine.init();
+   // glEnable(GL_DEPTH_TEST);
+  //  glDisable(GL_CULL_FACE);
+//    glShadeModel(GL_SMOOTH);
+
+    _geometryEngine.init(_program);
 }
 
 void GLviewer::render() {
@@ -38,14 +41,16 @@ void GLviewer::render() {
 
     glClear(GL_COLOR_BUFFER_BIT);
 
+    glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+
     _program->bind();
 
     QMatrix4x4 matrix;
-    matrix.perspective(60, width()/height(), 0.1, 100.0);
+    matrix.perspective(60, 4.0/3.0, 0.1, 100.0);
     matrix.translate(0, 0, -10);
-    //matrix.rotate(100.0f * screen()->refreshRate(), 0, 1, 0);
+  //  matrix.rotate(100.0f * screen()->refreshRate(), 0, 1, 0);
 
-    _program->setUniformValue("qt_ModelViewProjectionMatrix", matrix);
+    _program->setUniformValue(_shaderMatrix, matrix);
 
     _geometryEngine.drawModel(_program);
 
@@ -55,8 +60,8 @@ void GLviewer::render() {
 }
 
 void GLviewer::initTextures() {
- /*   glEnable(GL_TEXTURE_2D);
-
+    glEnable(GL_TEXTURE_2D);
+/*
     std::cout << glGetError() << std::endl;
 
     glGenTextures(1, &_textureCV);

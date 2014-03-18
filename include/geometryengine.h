@@ -14,12 +14,16 @@ public:
     GeometryEngine();
     ~GeometryEngine();
 
-    void init();
+    void init(QOpenGLShaderProgram * program);
     void drawModel(QOpenGLShaderProgram * program);
 
 private:
     QOpenGLBuffer _vboVert;
+    QOpenGLBuffer _vboColor;
     QOpenGLBuffer _vboInd;
+
+    int _vertexLocation;
+    int _texcoordLocation;
 
     GLuint _vboIds[2];
 

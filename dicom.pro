@@ -80,6 +80,3 @@ HEADERS  += include/mainwindow.h\
 RESOURCES += resources.qrc
 
 FORMS    += ui/mainwindow.ui
-
-RESOURCES += \
-    resources.qrc

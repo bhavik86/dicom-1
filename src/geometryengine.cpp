@@ -2,11 +2,13 @@
 
 typedef struct _VertexData {
     QVector3D position;
+    QVector3D color;
     QVector2D texCoord;
 }VertexData;
 
 GeometryEngine::GeometryEngine() :
     _vboVert(QOpenGLBuffer::VertexBuffer),
+    _vboColor(QOpenGLBuffer::VertexBuffer),
     _vboInd(QOpenGLBuffer::IndexBuffer) {
 
 }
@@ -16,8 +18,11 @@ GeometryEngine::~GeometryEngine() {
     _vboInd.destroy();
 }
 
-void GeometryEngine::init() {
+void GeometryEngine::init(QOpenGLShaderProgram * program) {
     initializeOpenGLFunctions();
+
+    _vertexLocation = program->attributeLocation("qt_Vertex");
+    _texcoordLocation = program->attributeLocation("qt_MultiTexCoord0");
 
     initGeometry();
 }
@@ -26,20 +31,26 @@ void GeometryEngine::initGeometry() {
     _vboVert.create();
     _vboVert.setUsagePattern(QOpenGLBuffer::UsagePattern::StaticDraw);
 
+    _vboColor.create();
+    _vboColor.setUsagePattern(QOpenGLBuffer::UsagePattern::StaticDraw);
+
     VertexData vertices[] = {
-        {QVector3D(-1.0, -1.0,  1.0), QVector2D(0.0, 0.0)},  // v0
-        {QVector3D( 1.0, -1.0,  1.0), QVector2D(0.33, 0.0)}, // v1
-        {QVector3D(-1.0,  1.0,  1.0), QVector2D(0.0, 0.5)},  // v2
+        {QVector3D(-1.0, -1.0,  1.0), QVector3D(1.0, 0.0, 0.0), QVector2D(0.0, 0.0)},  // v0
+        {QVector3D( 1.0, -1.0,  1.0), QVector3D(1.0, 0.0, 1.0), QVector2D(0.33, 0.0)}, // v1
+        {QVector3D(-1.0,  1.0,  1.0), QVector3D(1.0, 0.0, 0.0), QVector2D(0.0, 0.5)},  // v2
     };
 
     _vboVert.bind();
     _vboVert.allocate(&vertices, 3 * sizeof(VertexData));
 
+    _vboColor.bind();
+    _vboColor.allocate(&vertices, 3 * sizeof(VertexData));
+
     _vboInd.create();
     _vboInd.setUsagePattern(QOpenGLBuffer::UsagePattern::StaticDraw);
 
     GLushort indices[] = {
-         2,  1,  0
+         0,  1,  2
     };
 
     _vboInd.bind();
@@ -47,25 +58,23 @@ void GeometryEngine::initGeometry() {
 }
 
 void GeometryEngine::drawModel(QOpenGLShaderProgram * program) {
-    //glBindBuffer(GL_ARRAY_BUFFER, _vboIds[0]);
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _vboIds[1]);
-
     int offset = 0;
 
-    int vertexLocation = program->attributeLocation("qt_Vertex");
-    program->enableAttributeArray(vertexLocation);
-    program->setAttributeBuffer(vertexLocation, GL_FLOAT, 0, 3, sizeof(VertexData));
-    //glVertexAttribPointer(vertexLocation, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (const void *)offset);
+    program->enableAttributeArray(_vertexLocation);
+    program->setAttributeBuffer(_vertexLocation, GL_FLOAT, offset, 3, sizeof(VertexData));
 
     offset += sizeof(QVector3D);
 
-    int texcoordLocation = program->attributeLocation("qt_MultiTexCoord0");
-    program->enableAttributeArray(texcoordLocation);
-    program->setAttributeBuffer(texcoordLocation, GL_FLOAT, offset, 2, sizeof(VertexData));
-    //glVertexAttribPointer(texcoordLocation, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), (const void *)offset);
+    program->enableAttributeArray("qt_Color");
+    program->setAttributeBuffer("qt_Color", GL_FLOAT, offset, 3, sizeof(VertexData));
 
-    //_vboVert->bind();
-    glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_BYTE, 0);
+    offset += sizeof(QVector3D);
+
+    program->enableAttributeArray(_texcoordLocation);
+    program->setAttributeBuffer(_texcoordLocation, GL_FLOAT, offset, 2, sizeof(VertexData));
+
+    _vboVert.bind();
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 
     qDebug() << program->log();
 }
