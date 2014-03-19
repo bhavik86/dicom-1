@@ -36,6 +36,8 @@ private:
     int _shaderMatrix;
     int _texSample;
 
+    int _count;
+
     float _alpha;
     float _beta;
     float _distance;
@@ -53,6 +55,10 @@ private:
     GeometryEngine _geometryEngine;
 
     QOpenGLTexture _textureCV;
+    QOpenGLTexture _textureCV3D;
+
+    QVector<QOpenGLTexture*>_textureCVVector;
+
     GLuint _textureCVGL;
 
     std::vector<cv::Mat*> _ctImages;

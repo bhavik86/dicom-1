@@ -12,6 +12,7 @@ GLviewer::GLviewer(const std::vector<cv::Mat *> & ctImages) :
     _beta(0),
     _distance(10),
     _textureCV(QOpenGLTexture::Target2D),
+    _textureCV3D(QOpenGLTexture::Target3D),
     _ctImages(ctImages) {
 
 }
@@ -29,9 +30,11 @@ void GLviewer::initialize() {
     _shaderMatrix = _program->uniformLocation("mvpMatrix");
     _texSample = _program->uniformLocation("texSample");
 
+    _count = _ctImages.size();
+
     initTextures();
 
-    _geometryEngine.init(_program, _ctImages.size());
+    _geometryEngine.init(_program, _count);
 }
 
 void GLviewer::fetchMatrices() {
@@ -67,8 +70,8 @@ void GLviewer::render() {
 
     _program->setUniformValue(_texSample, 0);
 
-    //glBindTexture(GL_TEXTURE_2D, _textureCVGL);
-    _textureCV.bind();
+   // glBindTexture(GL_TEXTURE_2D, _textureCVGL);
+    //_textureCV.bind();
 
     _geometryEngine.drawModel(_program);
 
@@ -76,56 +79,92 @@ void GLviewer::render() {
 }
 
 void GLviewer::initTextures() {
-    /*
-    glGenTextures(1, &_textureCVGL);
-    glBindTexture(GL_TEXTURE_2D, _textureCVGL);
-
-    glActiveTexture(GL_TEXTURE0); */
-
-    cv::Mat image(*(_ctImages[100]));
-    cv::flip(image, image, 0);
+   /*
+    cv::Mat image1(*(_ctImages[0]));
+    cv::Mat image;
+    cv::flip(image1, image1, 0);
+    cv::cvtColor(image1, image, CV_GRAY2RGBA);
 
     _textureCV.setSize(image.cols, image.rows);
-    _textureCV.setFormat(QOpenGLTexture::RGBAFormat);
+    _textureCV.setFormat(QOpenGLTexture::RGBA_DXT5);
     _textureCV.allocateStorage();
 
     QOpenGLPixelTransferOptions pixelOptions;
     pixelOptions.setAlignment((image.step & 3) ? 1 : 4);
-    pixelOptions.setRowLength(image.step / image.elemSize());
-
-    _textureCV.setData(QOpenGLTexture::Red, QOpenGLTexture::UInt16, (void *) image.data, &pixelOptions);
+    pixelOptions.setRowLength(image.step1());
+/*
+    //_textureCV.setCompressedData(QOpenGLTexture::Red, QOpenGLTexture::UInt16, (void *) image.data, &pixelOptions);
+    _textureCV.setCompressedData(image.elemSize() * image.total(), (void *) image.data, 0);// &pixelOptions);
 
     _textureCV.setMinificationFilter(QOpenGLTexture::LinearMipMapNearest);
     _textureCV.setMagnificationFilter(QOpenGLTexture::Linear);
     _textureCV.setWrapMode(QOpenGLTexture::ClampToBorder);
 
     _textureCV.generateMipMaps();
-/*
-    cv::Mat image(*(_ctImages[100]));
-    cv::flip(image, image, 0);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+*
+    int byteSizeMat = _ctImages[0]->elemSize() * _ctImages[0]->total();
+    int byteSizeAll = byteSizeMat * _count;
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    qDebug() << byteSizeAll;
 
-    glPixelStorei(GL_UNPACK_ALIGNMENT, (image.step & 3) ? 1 : 4);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, image.step / image.elemSize());
+    uchar * data = new uchar[byteSizeAll];
 
-   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image.cols,
-            image.rows, 0, GL_RED, GL_UNSIGNED_SHORT, image.ptr());
+    for (int i = 0; i != _count; ++ i) {
+        cv::flip(*(_ctImages[i]), image, 0);
 
-   glGenerateMipmap(GL_TEXTURE_2D);
+        memcpy(data + byteSizeMat * i, image.data, byteSizeMat);
+    }
 
-/*
-    _textureCV.setWrapMode(QOpenGLTexture::WrapMode::Repeat);
-    _textureCV.bind();
-    glBindTexture(GL_TEXTURE_2D, _textureCVGL);
+    qDebug() << image.cols * image.rows * _ctImages.size();
 
-    cv::namedWindow("WINDOW");
-    cv::imshow("WINDOW", *(_ctImages[100]));
-    cv::waitKey(0);*/
+    _textureCV3D.setSize(image.cols, image.rows, _count);//_ctImages.size());
+    _textureCV3D.setFormat(QOpenGLTexture::RGBAFormat);
+    _textureCV3D.allocateStorage();
+
+    _textureCV3D.setData(QOpenGLTexture::Red, QOpenGLTexture::UInt16, (void *) data, &pixelOptions);
+
+    _textureCV3D.setMinificationFilter(QOpenGLTexture::LinearMipMapNearest);
+    _textureCV3D.setMagnificationFilter(QOpenGLTexture::Linear);
+    _textureCV3D.setWrapMode(QOpenGLTexture::ClampToBorder);
+
+    _textureCV3D.generateMipMaps();
+
+
+*/
+   glGenTextures(1, &_textureCVGL);
+   glBindTexture(GL_TEXTURE_3D, _textureCVGL);
+
+   glActiveTexture(GL_TEXTURE0);
+
+   int byteSizeMat = _ctImages[0]->elemSize() * _ctImages[0]->total();
+   int byteSizeAll = byteSizeMat * _count;
+
+   cv::Mat image;
+
+   uchar * data = new uchar[byteSizeAll];
+
+   for (int i = 0; i != _count; ++ i) {
+       cv::flip(*(_ctImages[i]), image, 0);
+
+       memcpy(data + byteSizeMat * i, image.data, byteSizeMat);
+   }
+
+
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP);
+
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  glPixelStorei(GL_UNPACK_ALIGNMENT, (image.step & 3) ? 1 : 4);
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, image.step / image.elemSize());
+
+  glTexImage3D(GL_TEXTURE_3D, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, image.cols, image.rows, _count, 0, GL_RED, GL_UNSIGNED_SHORT, data);
+
+  glGenerateMipmap(GL_TEXTURE_3D);
+
 }
 
 void GLviewer::mousePressEvent(QMouseEvent * event) {
