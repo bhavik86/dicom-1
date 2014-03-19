@@ -2,13 +2,11 @@
 
 typedef struct _VertexData {
     QVector3D position;
-    QVector3D color;
     QVector2D texCoord;
 }VertexData;
 
 GeometryEngine::GeometryEngine() :
     _vboVert(QOpenGLBuffer::VertexBuffer),
-    _vboColor(QOpenGLBuffer::VertexBuffer),
     _vboInd(QOpenGLBuffer::IndexBuffer) {
 
 }
@@ -16,47 +14,59 @@ GeometryEngine::GeometryEngine() :
 GeometryEngine::~GeometryEngine() {
     _vboVert.destroy();
     _vboInd.destroy();
-    _vboColor.destroy();
 }
 
-void GeometryEngine::init(QOpenGLShaderProgram * program) {
+void GeometryEngine::init(QOpenGLShaderProgram * program, const int & count) {
     initializeOpenGLFunctions();
 
-    _vertexLocation = program->attributeLocation("qt_Vertex");
-    _texcoordLocation = program->attributeLocation("qt_MultiTexCoord0");
+    _vertexLocation = program->attributeLocation("vertex");
+    _texcoordLocation = program->attributeLocation("tex");
 
-    initGeometry();
+    initGeometry(count);
 }
 
-void GeometryEngine::initGeometry() {
+void GeometryEngine::initGeometry(const int & count) {
     _vboVert.create();
-    _vboVert.setUsagePattern(QOpenGLBuffer::UsagePattern::StaticDraw);
+    _vboVert.setUsagePattern(QOpenGLBuffer::UsagePattern::DynamicDraw);
 
-    _vboColor.create();
-    _vboColor.setUsagePattern(QOpenGLBuffer::UsagePattern::StaticDraw);
+    int vertexCount = 4 * count;
+    int indexCount = 6 * count;
 
-    VertexData vertices[] = {
-        {QVector3D(-1.0, -1.0,  1.0), QVector3D(1.0, 0.0, 0.0), QVector2D(0.0, 0.0)},  // v0
-        {QVector3D( 1.0, -1.0,  1.0), QVector3D(1.0, 0.0, 1.0), QVector2D(1.0, 0.0)}, // v1
-        {QVector3D(-1.0,  1.0,  1.0), QVector3D(1.0, 0.0, 0.0), QVector2D(0.0, 1.0)},  // v2
-        {QVector3D( 1.0,  1.0,  1.0), QVector3D(1.0, 0.0, 0.0), QVector2D(1.0, 1.0)},  // v3
+    VertexData vertices[vertexCount];
+    GLushort indices[indexCount];
+
+    float step = 2.0 / (float) count;
+    float zCurrent = -1.0;
+
+    int currentVert = 0;
+    int currentIndex = 0;
+
+    for (int i = 0; i != count; ++ i) {
+        vertices[currentVert ++] = {QVector3D(-1.0, -1.0,  zCurrent), QVector2D(0.0, 0.0)};
+        vertices[currentVert ++] = {QVector3D(-1.0, 1.0,  zCurrent), QVector2D(0.0, 1.0)};
+        vertices[currentVert ++] = {QVector3D(1.0, 1.0,  zCurrent), QVector2D(1.0, 1.0)};
+        vertices[currentVert ++] = {QVector3D(1.0, -1.0,  zCurrent), QVector2D(1.0, 0.0)};
+
+        indices[currentIndex ++] = 4 * i;
+        indices[currentIndex ++] = 4 * i + 1;
+        indices[currentIndex ++] = 4 * i + 2;
+        indices[currentIndex ++] = 4 * i;
+        indices[currentIndex ++] = 4 * i + 2;
+        indices[currentIndex ++] = 4 * i + 3;
+
+        zCurrent += step;
     };
 
     _vboVert.bind();
-    _vboVert.allocate(&vertices, 4 * sizeof(VertexData));
-
-    _vboColor.bind();
-    _vboColor.allocate(&vertices, 4 * sizeof(VertexData));
+    _vboVert.allocate(&vertices, vertexCount * sizeof(VertexData));
 
     _vboInd.create();
-    _vboInd.setUsagePattern(QOpenGLBuffer::UsagePattern::StaticDraw);
-
-    GLushort indices[] = {
-         0, 1, 2, 2, 1, 3
-    };
+    _vboInd.setUsagePattern(QOpenGLBuffer::UsagePattern::DynamicDraw);
 
     _vboInd.bind();
-    _vboInd.allocate(&indices, 6 * sizeof(GLushort));
+    _vboInd.allocate(&indices, indexCount * sizeof(GLushort));
+
+    _indexCount = indexCount;
 }
 
 void GeometryEngine::drawModel(QOpenGLShaderProgram * program) {
@@ -67,15 +77,9 @@ void GeometryEngine::drawModel(QOpenGLShaderProgram * program) {
 
     offset += sizeof(QVector3D);
 
-    program->enableAttributeArray("qt_Color");
-    program->setAttributeBuffer("qt_Color", GL_FLOAT, offset, 3, sizeof(VertexData));
-
-    offset += sizeof(QVector3D);
-
     program->enableAttributeArray(_texcoordLocation);
     program->setAttributeBuffer(_texcoordLocation, GL_FLOAT, offset, 2, sizeof(VertexData));
 
-    glDrawElements(GL_TRIANGLE_STRIP, 6, GL_UNSIGNED_SHORT, 0);
+    glDrawElements(GL_TRIANGLES, _indexCount, GL_UNSIGNED_SHORT, 0);
 
-    qDebug() << program->log();
 }

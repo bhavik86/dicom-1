@@ -15,21 +15,19 @@ public:
     GeometryEngine();
     ~GeometryEngine();
 
-    void init(QOpenGLShaderProgram * program);
+    void init(QOpenGLShaderProgram * program, const int & count);
     void drawModel(QOpenGLShaderProgram * program);
 
 private:
     QOpenGLBuffer _vboVert;
-    QOpenGLBuffer _vboColor;
     QOpenGLBuffer _vboInd;
 
     int _vertexLocation;
     int _texcoordLocation;
 
-    void initGeometry();
+    int _indexCount;
 
-    GLuint _vboIds[2];
-
+    void initGeometry(const int & count);
 };
 
 #endif // GEOMETRYENGINE_H

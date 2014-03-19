@@ -2,6 +2,8 @@
 #define GLVIEWER_H
 
 #include <QtGui/QOpenGLTexture>
+#include <QtGui/QMouseEvent>
+#include <QtGui/QWheelEvent>
 
 #include "openglwindow.h"
 #include "geometryengine.h"
@@ -24,10 +26,29 @@ protected:
 
     void resizeGL(int width, int height);
 
+    void mousePressEvent(QMouseEvent * event);
+    void mouseMoveEvent(QMouseEvent * event);
+    void wheelEvent(QWheelEvent * event);
+
 private:
     QOpenGLShaderProgram * _program;
 
     int _shaderMatrix;
+    int _texSample;
+
+    float _alpha;
+    float _beta;
+    float _distance;
+
+    QMatrix4x4 _mMatrix;
+    QMatrix4x4 _vMatrix;
+    QMatrix4x4 _pMatrix;
+    QMatrix4x4 _cameraTransformation;
+
+    QVector3D _cameraPosition;
+    QVector3D _cameraUpDirection;
+
+    QPoint _lastMousePosition;
 
     GeometryEngine _geometryEngine;
 
@@ -36,6 +57,7 @@ private:
 
     std::vector<cv::Mat*> _ctImages;
 
+    void inline fetchMatrices();
 signals:
 
 public slots:
