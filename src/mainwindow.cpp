@@ -47,7 +47,7 @@ void MainWindow::readDicom() {
 
             _glviewer->setSurfaceType(QSurface::OpenGLSurface);
             _glviewer->setFormat(format);
-            _glviewer->resize(640, 480);
+            _glviewer->resize(640, 640);
 
             _glviewer->show();
         }

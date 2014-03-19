@@ -2,7 +2,7 @@
 
 typedef struct _VertexData {
     QVector3D position;
-    QVector2D texCoord;
+    QVector3D texCoord;
 }VertexData;
 
 GeometryEngine::GeometryEngine() :
@@ -36,16 +36,19 @@ void GeometryEngine::initGeometry(const int & count) {
     GLushort indices[indexCount];
 
     float step = 2.0 / (float) count;
+    float stepTexture = 1.0 / (float) count;
+
     float zCurrent = -1.0;
+    float zCurrentTexture = 0.0;
 
     int currentVert = 0;
     int currentIndex = 0;
 
     for (int i = 0; i != count; ++ i) {
-        vertices[currentVert ++] = {QVector3D(-1.0, -1.0,  zCurrent), QVector2D(0.0, 0.0)};
-        vertices[currentVert ++] = {QVector3D(-1.0, 1.0,  zCurrent), QVector2D(0.0, 1.0)};
-        vertices[currentVert ++] = {QVector3D(1.0, 1.0,  zCurrent), QVector2D(1.0, 1.0)};
-        vertices[currentVert ++] = {QVector3D(1.0, -1.0,  zCurrent), QVector2D(1.0, 0.0)};
+        vertices[currentVert ++] = {QVector3D(-1.0, -1.0,  zCurrent), QVector3D(0.0, 0.0, zCurrentTexture)};
+        vertices[currentVert ++] = {QVector3D(-1.0, 1.0,  zCurrent), QVector3D(0.0, 1.0, zCurrentTexture)};
+        vertices[currentVert ++] = {QVector3D(1.0, 1.0,  zCurrent), QVector3D(1.0, 1.0, zCurrentTexture)};
+        vertices[currentVert ++] = {QVector3D(1.0, -1.0,  zCurrent), QVector3D(1.0, 0.0, zCurrentTexture)};
 
         indices[currentIndex ++] = 4 * i;
         indices[currentIndex ++] = 4 * i + 1;
@@ -55,6 +58,7 @@ void GeometryEngine::initGeometry(const int & count) {
         indices[currentIndex ++] = 4 * i + 3;
 
         zCurrent += step;
+        zCurrentTexture += stepTexture;
     };
 
     _vboVert.bind();
@@ -78,7 +82,7 @@ void GeometryEngine::drawModel(QOpenGLShaderProgram * program) {
     offset += sizeof(QVector3D);
 
     program->enableAttributeArray(_texcoordLocation);
-    program->setAttributeBuffer(_texcoordLocation, GL_FLOAT, offset, 2, sizeof(VertexData));
+    program->setAttributeBuffer(_texcoordLocation, GL_FLOAT, offset, 3, sizeof(VertexData));
 
     glDrawElements(GL_TRIANGLES, _indexCount, GL_UNSIGNED_SHORT, 0);
 

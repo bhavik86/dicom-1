@@ -2,6 +2,5 @@
     <qresource prefix="/">
         <file>shaders/fragment.glsl</file>
         <file>shaders/vertex.glsl</file>
-        <file>shaders/image1.jpg</file>
     </qresource>
 </RCC>

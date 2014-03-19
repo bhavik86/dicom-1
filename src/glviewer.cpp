@@ -2,6 +2,8 @@
 #include <QtGui/QScreen>
 #include <QtGui/QOpenGLPixelTransferOptions>
 
+#include <iostream>
+
 #include "glviewer.h"
 
 #include "opencv2/highgui/highgui.hpp"
@@ -30,7 +32,7 @@ void GLviewer::initialize() {
     _shaderMatrix = _program->uniformLocation("mvpMatrix");
     _texSample = _program->uniformLocation("texSample");
 
-    _count = _ctImages.size();
+    _count = 300;//_ctImages.size();
 
     initTextures();
 
@@ -51,10 +53,12 @@ void GLviewer::fetchMatrices() {
     _mMatrix.setToIdentity();
 
     _vMatrix.setToIdentity();
-    _vMatrix.lookAt(_cameraPosition, QVector3D(0, 0, 0), _cameraUpDirection);
+    _vMatrix.lookAt(_cameraPosition, QVector3D(0.0, 0.0, 0), _cameraUpDirection);
   //  matrix.rotate(100.0f * screen()->refreshRate(), 0, 1, 0);
 
     _program->setUniformValue(_shaderMatrix, _pMatrix * _vMatrix * _mMatrix);
+
+    qDebug() << _pMatrix * _vMatrix * _mMatrix;
 }
 
 void GLviewer::render() {
@@ -68,9 +72,10 @@ void GLviewer::render() {
 
     fetchMatrices();
 
+    _program->setUniformValue("count", _count);
     _program->setUniformValue(_texSample, 0);
 
-   // glBindTexture(GL_TEXTURE_2D, _textureCVGL);
+    glBindTexture(GL_TEXTURE_3D, _textureCVGL);
     //_textureCV.bind();
 
     _geometryEngine.drawModel(_program);
@@ -132,6 +137,8 @@ void GLviewer::initTextures() {
 
 
 */
+   glEnable(GL_TEXTURE_3D);
+
    glGenTextures(1, &_textureCVGL);
    glBindTexture(GL_TEXTURE_3D, _textureCVGL);
 
@@ -161,7 +168,10 @@ void GLviewer::initTextures() {
   glPixelStorei(GL_UNPACK_ALIGNMENT, (image.step & 3) ? 1 : 4);
   glPixelStorei(GL_UNPACK_ROW_LENGTH, image.step / image.elemSize());
 
-  glTexImage3D(GL_TEXTURE_3D, 0, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT, image.cols, image.rows, _count, 0, GL_RED, GL_UNSIGNED_SHORT, data);
+  GLint swizzleMask[] = {GL_RED, GL_RED, GL_RED, GL_RED};
+  glTexParameteriv(GL_TEXTURE_3D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+
+  glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, image.cols, image.rows, _count, 0, GL_RED, GL_UNSIGNED_SHORT, data);
 
   glGenerateMipmap(GL_TEXTURE_3D);
 
@@ -214,8 +224,6 @@ void GLviewer::wheelEvent(QWheelEvent * event) {
 
         render();
     }
-
-    qDebug() << _distance;
 
     event->accept();
 }
