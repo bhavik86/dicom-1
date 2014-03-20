@@ -8,14 +8,13 @@ typedef uint32_t u_int32_t;
 
 #endif
 
-#include "dicomreader.h"
-#include "StegerLines.h"
-
 #include "gdcmReader.h"
 #include "gdcmImageReader.h"
 #include "gdcmAttribute.h"
 #include "gdcmDataSetHelper.h"
 #include "gdcmStringFilter.h"
+
+#include "dicomreader.h"
 
 #define WINDOW_BACKPROJECT_IMAGE "backprojet"
 #define WINDOW_INPUT_IMAGE "input"

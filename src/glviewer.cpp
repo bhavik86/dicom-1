@@ -10,17 +10,18 @@
 
 GLviewer::GLviewer(const std::vector<cv::Mat *> & ctImages) :
     _program(0),
+    _rBottom(0.1),
+    _rTop(0.5),
     _alpha(0),
     _beta(0),
     _distance(10),
-    _textureCV(QOpenGLTexture::Target2D),
     _textureCV3D(QOpenGLTexture::Target3D),
     _ctImages(ctImages) {
 
 }
 
 GLviewer::~GLviewer() {
-    _textureCV.release();
+    _textureCV3D.release();
 }
 
 void GLviewer::initialize() {
@@ -30,9 +31,14 @@ void GLviewer::initialize() {
     _program->link();
 
     _shaderMatrix = _program->uniformLocation("mvpMatrix");
-    _texSample = _program->uniformLocation("texSample");
+    _shaderTexSample = _program->uniformLocation("texSample");
+    _shaderRBottom = _program->uniformLocation("rBottom");
+    _shaderRTop = _program->uniformLocation("rTop");
 
-    _count = 300;//_ctImages.size();
+    _count = _ctImages.size();
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     initTextures();
 
@@ -47,18 +53,14 @@ void GLviewer::fetchMatrices() {
     _cameraUpDirection = _cameraTransformation * QVector3D(0, 1, 0);
 
     _pMatrix.setToIdentity();
-    //_pMatrix.perspective(60.0, (float)width()/(float)height(), 0.1, 100.0);
     _pMatrix.ortho(-2, 2, -2, 2, 0.001, 1000);
 
     _mMatrix.setToIdentity();
 
     _vMatrix.setToIdentity();
-    _vMatrix.lookAt(_cameraPosition, QVector3D(0.0, 0.0, 0), _cameraUpDirection);
-  //  matrix.rotate(100.0f * screen()->refreshRate(), 0, 1, 0);
+    _vMatrix.lookAt(_cameraPosition, QVector3D(0.0, 0.0, 0.0), _cameraUpDirection);
 
     _program->setUniformValue(_shaderMatrix, _pMatrix * _vMatrix * _mMatrix);
-
-    qDebug() << _pMatrix * _vMatrix * _mMatrix;
 }
 
 void GLviewer::render() {
@@ -72,11 +74,11 @@ void GLviewer::render() {
 
     fetchMatrices();
 
-    _program->setUniformValue("count", _count);
-    _program->setUniformValue(_texSample, 0);
+    _program->setUniformValue(_shaderTexSample, 0);
+    _program->setUniformValue(_shaderRBottom, _rBottom);
+    _program->setUniformValue(_shaderRTop, _rTop);
 
-    glBindTexture(GL_TEXTURE_3D, _textureCVGL);
-    //_textureCV.bind();
+    _textureCV3D.bind();
 
     _geometryEngine.drawModel(_program);
 
@@ -84,34 +86,15 @@ void GLviewer::render() {
 }
 
 void GLviewer::initTextures() {
-   /*
-    cv::Mat image1(*(_ctImages[0]));
-    cv::Mat image;
-    cv::flip(image1, image1, 0);
-    cv::cvtColor(image1, image, CV_GRAY2RGBA);
 
-    _textureCV.setSize(image.cols, image.rows);
-    _textureCV.setFormat(QOpenGLTexture::RGBA_DXT5);
-    _textureCV.allocateStorage();
+    cv::Mat image(*(_ctImages[0]));
 
     QOpenGLPixelTransferOptions pixelOptions;
     pixelOptions.setAlignment((image.step & 3) ? 1 : 4);
     pixelOptions.setRowLength(image.step1());
-/*
-    //_textureCV.setCompressedData(QOpenGLTexture::Red, QOpenGLTexture::UInt16, (void *) image.data, &pixelOptions);
-    _textureCV.setCompressedData(image.elemSize() * image.total(), (void *) image.data, 0);// &pixelOptions);
 
-    _textureCV.setMinificationFilter(QOpenGLTexture::LinearMipMapNearest);
-    _textureCV.setMagnificationFilter(QOpenGLTexture::Linear);
-    _textureCV.setWrapMode(QOpenGLTexture::ClampToBorder);
-
-    _textureCV.generateMipMaps();
-
-*
     int byteSizeMat = _ctImages[0]->elemSize() * _ctImages[0]->total();
     int byteSizeAll = byteSizeMat * _count;
-
-    qDebug() << byteSizeAll;
 
     uchar * data = new uchar[byteSizeAll];
 
@@ -121,10 +104,8 @@ void GLviewer::initTextures() {
         memcpy(data + byteSizeMat * i, image.data, byteSizeMat);
     }
 
-    qDebug() << image.cols * image.rows * _ctImages.size();
-
-    _textureCV3D.setSize(image.cols, image.rows, _count);//_ctImages.size());
-    _textureCV3D.setFormat(QOpenGLTexture::RGBAFormat);
+    _textureCV3D.setSize(image.cols, image.rows, _count);
+    _textureCV3D.setFormat(QOpenGLTexture::R8_UNorm);
     _textureCV3D.allocateStorage();
 
     _textureCV3D.setData(QOpenGLTexture::Red, QOpenGLTexture::UInt16, (void *) data, &pixelOptions);
@@ -134,47 +115,6 @@ void GLviewer::initTextures() {
     _textureCV3D.setWrapMode(QOpenGLTexture::ClampToBorder);
 
     _textureCV3D.generateMipMaps();
-
-
-*/
-   glEnable(GL_TEXTURE_3D);
-
-   glGenTextures(1, &_textureCVGL);
-   glBindTexture(GL_TEXTURE_3D, _textureCVGL);
-
-   glActiveTexture(GL_TEXTURE0);
-
-   int byteSizeMat = _ctImages[0]->elemSize() * _ctImages[0]->total();
-   int byteSizeAll = byteSizeMat * _count;
-
-   cv::Mat image;
-
-   uchar * data = new uchar[byteSizeAll];
-
-   for (int i = 0; i != _count; ++ i) {
-       cv::flip(*(_ctImages[i]), image, 0);
-
-       memcpy(data + byteSizeMat * i, image.data, byteSizeMat);
-   }
-
-
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP);
-
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-  glPixelStorei(GL_UNPACK_ALIGNMENT, (image.step & 3) ? 1 : 4);
-  glPixelStorei(GL_UNPACK_ROW_LENGTH, image.step / image.elemSize());
-
-  GLint swizzleMask[] = {GL_RED, GL_RED, GL_RED, GL_RED};
-  glTexParameteriv(GL_TEXTURE_3D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
-
-  glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, image.cols, image.rows, _count, 0, GL_RED, GL_UNSIGNED_SHORT, data);
-
-  glGenerateMipmap(GL_TEXTURE_3D);
-
 }
 
 void GLviewer::mousePressEvent(QMouseEvent * event) {

@@ -6,7 +6,7 @@
 
 QT       += core gui
 
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets opengl
+greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 TARGET = dicom
 TEMPLATE = app
@@ -54,28 +54,21 @@ LIBS += -lgdcmcharls \
         -lgdcmDSED \
         -lgdcmMSFF \
         -lgdcmIOD \
-        -lgdcmopenjpeg \
-        -lGLEW
+        -lgdcmopenjpeg
 
 SOURCES += src/main.cpp\
            src/mainwindow.cpp\
            src/dicomreader.cpp\
-           src/normal.cpp\
-           src/GaussDeriv.cpp\
-           src/StegerLines.cpp \
            src/glviewer.cpp \
            src/geometryengine.cpp \
-    src/openglwindow.cpp
+           src/openglwindow.cpp
 
 HEADERS  += include/mainwindow.h\
             include/dicomreader.h\
-            include/normal.h\
-            include/GaussDeriv.h\
-            include/StegerLines.h \
             include/ctprocessing.hpp \
             include/glviewer.h \
             include/geometryengine.h \
-    include/openglwindow.h
+            include/openglwindow.h
 
 RESOURCES += resources.qrc
 

@@ -34,7 +34,12 @@ private:
     QOpenGLShaderProgram * _program;
 
     int _shaderMatrix;
-    int _texSample;
+    int _shaderTexSample;
+    int _shaderRBottom;
+    int _shaderRTop;
+
+    float _rBottom;
+    float _rTop;
 
     int _count;
 
@@ -54,12 +59,7 @@ private:
 
     GeometryEngine _geometryEngine;
 
-    QOpenGLTexture _textureCV;
     QOpenGLTexture _textureCV3D;
-
-    QVector<QOpenGLTexture*>_textureCVVector;
-
-    GLuint _textureCVGL;
 
     std::vector<cv::Mat*> _ctImages;
 

@@ -22,8 +22,8 @@ private:
     QOpenGLBuffer _vboVert;
     QOpenGLBuffer _vboInd;
 
-    int _vertexLocation;
-    int _texcoordLocation;
+    int _shaderVertex;
+    int _shaderTex;
 
     int _indexCount;
 

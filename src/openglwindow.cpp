@@ -7,7 +7,7 @@
 OpenGLWindow::OpenGLWindow(QWindow * parent) :
     QWindow(parent),
     _updatePending(false),
-    _animating(true),
+    _animating(false),
     _context(0),
     _device(0) {
     setSurfaceType(QWindow::OpenGLSurface);
@@ -93,9 +93,9 @@ void OpenGLWindow::renderNow() {
     render();
 
     _context->swapBuffers(this);
-/*
+
     if (_animating)
-        renderLater();*/
+        renderLater();
 }
 
 void OpenGLWindow::setAnimating(bool animating) {

@@ -19,8 +19,8 @@ GeometryEngine::~GeometryEngine() {
 void GeometryEngine::init(QOpenGLShaderProgram * program, const int & count) {
     initializeOpenGLFunctions();
 
-    _vertexLocation = program->attributeLocation("vertex");
-    _texcoordLocation = program->attributeLocation("tex");
+    _shaderVertex = program->attributeLocation("vertex");
+    _shaderTex = program->attributeLocation("tex");
 
     initGeometry(count);
 }
@@ -76,13 +76,13 @@ void GeometryEngine::initGeometry(const int & count) {
 void GeometryEngine::drawModel(QOpenGLShaderProgram * program) {
     int offset = 0;
 
-    program->enableAttributeArray(_vertexLocation);
-    program->setAttributeBuffer(_vertexLocation, GL_FLOAT, offset, 3, sizeof(VertexData));
+    program->enableAttributeArray(_shaderVertex);
+    program->setAttributeBuffer(_shaderVertex, GL_FLOAT, offset, 3, sizeof(VertexData));
 
     offset += sizeof(QVector3D);
 
-    program->enableAttributeArray(_texcoordLocation);
-    program->setAttributeBuffer(_texcoordLocation, GL_FLOAT, offset, 3, sizeof(VertexData));
+    program->enableAttributeArray(_shaderTex);
+    program->setAttributeBuffer(_shaderTex, GL_FLOAT, offset, 3, sizeof(VertexData));
 
     glDrawElements(GL_TRIANGLES, _indexCount, GL_UNSIGNED_SHORT, 0);
 

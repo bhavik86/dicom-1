@@ -1,7 +1,7 @@
 #ifndef DICOMREADER_H
 #define DICOMREADER_H
 
-#include <QObject>
+#include <QtCore/QObject>
 
 #include "gdcmImage.h"
 #include "gdcmFile.h"
