@@ -204,7 +204,7 @@ void GLviewer::mouseMoveEvent(QMouseEvent * event) {
             _beta -= 360;
         }
 
-        render();
+        renderLater();
     }
 
     _lastMousePosition = event->pos();
@@ -222,7 +222,7 @@ void GLviewer::wheelEvent(QWheelEvent * event) {
             _distance *= 0.9;
         }
 
-        render();
+        renderLater();
     }
 
     event->accept();

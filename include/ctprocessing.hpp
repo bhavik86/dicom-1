@@ -261,15 +261,15 @@ public:
 
             //cv::ocl::oclMat * oclData = new cv::ocl::oclMat(*data8);
 
-            cv::Mat * sinogram = new cv::Mat(radon(*data, rotationMatrix, RADON_DEGREE_RANGE, width, height, wPad, hPad));
+            //cv::Mat * sinogram = new cv::Mat(radon(*data, rotationMatrix, RADON_DEGREE_RANGE, width, height, wPad, hPad));
 
-            cv::Mat * fourier1d = new cv::Mat(Fourier1D(*sinogram, dhtCoeffs));
+            //cv::Mat * fourier1d = new cv::Mat(Fourier1D(*sinogram, dhtCoeffs));
 
             //cv::Mat * backprojection = new cv::Mat(backproject(*sinogram, cosTable, sinTable));
 
             _ctData.images->ctImages.at(i) = data;
-            _ctData.images->fourier1d.at(i) = fourier1d;
-            _ctData.images->sinograms.at(i) = sinogram;
+            _ctData.images->fourier1d.at(i) = data;
+            _ctData.images->sinograms.at(i) = data;
             //_ctData.images->images.at(i) = backprojection;
 
             //cv::medianBlur(*data8, *contourImage, 5);

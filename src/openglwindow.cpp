@@ -7,7 +7,7 @@
 OpenGLWindow::OpenGLWindow(QWindow * parent) :
     QWindow(parent),
     _updatePending(false),
-    _animating(false),
+    _animating(true),
     _context(0),
     _device(0) {
     setSurfaceType(QWindow::OpenGLSurface);
@@ -49,13 +49,20 @@ bool OpenGLWindow::event(QEvent * event) {
     case QEvent::UpdateRequest:
         _updatePending = false;
         renderNow();
-        return true;
+        return false;
     default:
         return QWindow::event(event);
     }
 }
 
-void OpenGLWindow::exposeEvent(QExposeEvent *event) {
+void OpenGLWindow::exposeEvent(QExposeEvent * event) {
+    Q_UNUSED(event);
+
+    if (isExposed())
+        renderNow();
+}
+
+void OpenGLWindow::resizeEvent(QResizeEvent * event) {
     Q_UNUSED(event);
 
     if (isExposed())
@@ -86,9 +93,9 @@ void OpenGLWindow::renderNow() {
     render();
 
     _context->swapBuffers(this);
-
+/*
     if (_animating)
-        renderLater();
+        renderLater();*/
 }
 
 void OpenGLWindow::setAnimating(bool animating) {

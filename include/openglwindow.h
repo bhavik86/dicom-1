@@ -65,7 +65,8 @@ public slots:
 protected:
     bool event(QEvent * event);
 
-    void exposeEvent(QExposeEvent *event);
+    void exposeEvent(QExposeEvent * event);
+    void resizeEvent(QResizeEvent * event);
 
 private:
     bool _updatePending;
